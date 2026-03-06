@@ -81,7 +81,9 @@ build_atf() {
     log_info "========================================"
 
     local atf_dir="${SOURCES_DIR}/imx-atf"
-    local build_dir="${atf_dir}/build/${BOARD}/release/bl31/bin"
+    local build_script="${atf_dir}/build.sh"
+    # ATF 编译输出在 build-optee/imx8mp/release/bl31.bin
+    local build_dir="${atf_dir}/build-optee/${BOARD}/release"
 
     if [ -f "${build_dir}/bl31.bin" ]; then
         log_info "ATF 已编译，跳过"
@@ -89,17 +91,15 @@ build_atf() {
         return 0
     fi
 
-    cd "${atf_dir}"
-
-    log_info "清理旧构建..."
-    make distclean > /dev/null 2>&1 || true
-
-    log_info "编译 ATF..."
-    make -j$(nproc) \
-        PLAT=${BOARD} \
-        IMX_ATF_PLAT=${BOARD} \
-        ARCH=aarch64 \
-        2>&1 | tee "${OUTPUT_DIR}/atf_build.log"
+    # 检查构建脚本是否存在
+    if [ -f "${build_script}" ]; then
+        log_info "使用构建脚本: ${build_script}"
+        cd "${atf_dir}"
+        bash "${build_script}" 2>&1 | tee "${OUTPUT_DIR}/atf_build.log"
+    else
+        log_error "构建脚本不存在: ${build_script}"
+        exit 1
+    fi
 
     if [ -f "${build_dir}/bl31.bin" ]; then
         cp "${build_dir}/bl31.bin" "${OUTPUT_DIR}/"
@@ -119,7 +119,9 @@ build_optee() {
     log_info "========================================"
 
     local optee_dir="${SOURCES_DIR}/optee/imx-optee-os"
-    local out_dir="${optee_dir}/out/core"
+    local build_script="${optee_dir}/build.sh"
+    # OP-TEE 输出在 out/arm-plat-imx/core/tee.bin
+    local out_dir="${optee_dir}/out/arm-plat-imx/core"
 
     if [ -f "${out_dir}/tee.bin" ]; then
         log_info "OP-TEE 已编译，跳过"
@@ -127,17 +129,15 @@ build_optee() {
         return 0
     fi
 
-    cd "${optee_dir}"
-
-    log_info "清理旧构建..."
-    make clean > /dev/null 2>&1 || true
-
-    log_info "编译 OP-TEE..."
-    make -j$(nproc) \
-        PLAT=${BOARD} \
-        ARCH=arm64 \
-        CROSS_COMPILE=${CROSS_COMPILE} \
-        2>&1 | tee "${OUTPUT_DIR}/optee_build.log"
+    # 检查构建脚本是否存在
+    if [ -f "${build_script}" ]; then
+        log_info "使用构建脚本: ${build_script}"
+        cd "${optee_dir}"
+        bash "${build_script}" 2>&1 | tee "${OUTPUT_DIR}/optee_build.log"
+    else
+        log_error "构建脚本不存在: ${build_script}"
+        exit 1
+    fi
 
     if [ -f "${out_dir}/tee.bin" ]; then
         cp "${out_dir}/tee.bin" "${OUTPUT_DIR}/"
@@ -157,31 +157,30 @@ build_uboot() {
     log_info "========================================"
 
     local uboot_dir="${SOURCES_DIR}/uboot-imx"
+    local build_script="${uboot_dir}/build.sh"
+    # U-Boot 输出在 build/imx8mp_frdm_defconfig/
+    local build_dir="${uboot_dir}/build/imx8mp_frdm_defconfig"
 
-    if [ -f "${uboot_dir}/u-boot.bin" ]; then
+    if [ -f "${build_dir}/u-boot.bin" ]; then
         log_info "U-Boot 已编译，跳过"
-        cp "${uboot_dir}/u-boot.bin" "${OUTPUT_DIR}/"
-        [ -f "${uboot_dir}/u-boot-spl.bin" ] && cp "${uboot_dir}/u-boot-spl.bin" "${OUTPUT_DIR}/"
+        cp "${build_dir}/u-boot.bin" "${OUTPUT_DIR}/"
+        [ -f "${build_dir}/SPL" ] && cp "${build_dir}/SPL" "${OUTPUT_DIR}/u-boot-spl.bin"
         return 0
     fi
 
-    cd "${uboot_dir}"
+    # 检查构建脚本是否存在
+    if [ -f "${build_script}" ]; then
+        log_info "使用构建脚本: ${build_script}"
+        cd "${uboot_dir}"
+        bash "${build_script}" 2>&1 | tee "${OUTPUT_DIR}/uboot_build.log"
+    else
+        log_error "构建脚本不存在: ${build_script}"
+        exit 1
+    fi
 
-    log_info "清理旧构建..."
-    make distclean > /dev/null 2>&1 || true
-
-    log_info "配置 U-Boot..."
-    make ${CROSS_COMPILE} ${BOARD}_${BOARD_NAME}_defconfig
-
-    log_info "编译 U-Boot..."
-    make -j$(nproc) \
-        ${CROSS_COMPILE} \
-        CONFIG_NXP_ESDHC_ADDR=0x30b50000 \
-        2>&1 | tee "${OUTPUT_DIR}/uboot_build.log"
-
-    if [ -f "${uboot_dir}/u-boot.bin" ]; then
-        cp "${uboot_dir}/u-boot.bin" "${OUTPUT_DIR}/"
-        [ -f "${uboot_dir}/u-boot-spl.bin" ] && cp "${uboot_dir}/u-boot-spl.bin" "${OUTPUT_DIR}/"
+    if [ -f "${build_dir}/u-boot.bin" ]; then
+        cp "${build_dir}/u-boot.bin" "${OUTPUT_DIR}/"
+        [ -f "${build_dir}/SPL" ] && cp "${build_dir}/SPL" "${OUTPUT_DIR}/u-boot-spl.bin"
         log_info "U-Boot 编译完成"
     else
         log_error "U-Boot 编译失败"
@@ -192,45 +191,55 @@ build_uboot() {
 # ============================================
 # Step 4: 编译 Linux 内核
 # ============================================
+copy_kernel() {
+    log_info "========================================"
+    log_info "复制 Linux 内核"
+    log_info "========================================"
+
+    local kernel_dir="${SOURCES_DIR}/linux-imx"
+
+    # 从源码目录复制
+    if [ -f "${kernel_dir}/arch/arm64/boot/Image" ]; then
+        cp "${kernel_dir}/arch/arm64/boot/Image" "${OUTPUT_DIR}/"
+        cp "${kernel_dir}/arch/arm64/boot/dts/freescale/imx8mp-frdm"*.dtb "${OUTPUT_DIR}/"
+        log_info "内核已从源码目录复制"
+        return 0
+    fi
+
+    # 从 output 目录跳过
+    if [ -f "${OUTPUT_DIR}/Image" ]; then
+        log_info "内核已在 output 目录，跳过"
+        return 0
+    fi
+
+    log_error "未找到内核镜像"
+    return 1
+}
+
+# ============================================
 build_kernel() {
     log_info "========================================"
     log_info "Step 4: 编译 Linux 内核"
     log_info "========================================"
 
     local kernel_dir="${SOURCES_DIR}/linux-imx"
+    local build_script="${kernel_dir}/build.sh"
 
-    if [ -f "${kernel_dir}/arch/arm64/boot/Image" ]; then
+    # 检查是否已编译
+    if [ -f "${kernel_dir}/arch/arm64/boot/Image" ] || [ -f "${OUTPUT_DIR}/Image" ]; then
         log_info "内核已编译，跳过"
-        cp "${kernel_dir}/arch/arm64/boot/Image" "${OUTPUT_DIR}/"
         return 0
     fi
 
-    cd "${kernel_dir}"
-
-    log_info "清理旧构建..."
-    make clean > /dev/null 2>&1 || true
-
-    log_info "配置内核..."
-    make ARCH=${ARCH} ${CROSS_COMPILE} ${BOARD}_${BOARD_NAME}_defconfig
-
-    log_info "编译内核 Image..."
-    make -j$(nproc) \
-        ARCH=${ARCH} \
-        ${CROSS_COMPILE} \
-        Image \
-        2>&1 | tee "${OUTPUT_DIR}/kernel_image.log"
-
-    log_info "编译设备树..."
-    make -j$(nproc) \
-        ARCH=${ARCH} \
-        ${CROSS_COMPILE} \
-        dtbs \
-        2>&1 | tee "${OUTPUT_DIR}/kernel_dtb.log"
-
-    cp "${kernel_dir}/arch/arm64/boot/Image" "${OUTPUT_DIR}/"
-
-    # 复制设备树
-    cp "${kernel_dir}/arch/arm64/boot/dts/freescale/imx8mp-frdm"*.dtb "${OUTPUT_DIR}/"
+    # 检查构建脚本是否存在
+    if [ -f "${build_script}" ]; then
+        log_info "使用构建脚本: ${build_script}"
+        cd "${kernel_dir}"
+        bash "${build_script}" 2>&1 | tee "${OUTPUT_DIR}/kernel_build.log"
+    else
+        log_error "构建脚本不存在: ${build_script}"
+        exit 1
+    fi
 
     log_info "内核编译完成"
 }
@@ -308,7 +317,7 @@ build_flash() {
     # 打包
     cd "${staging_dir}"
     log_info "打包 flash.bin..."
-    make SOC=iMX8MP flash_linux_m4 2>&1 | tee "${OUTPUT_DIR}/flash_mkimage.log"
+    make SOC=iMX8M flash 2>&1 | tee "${OUTPUT_DIR}/flash_mkimage.log"
 
     if [ -f "${staging_dir}/flash.bin" ]; then
         cp "${staging_dir}/flash.bin" "${OUTPUT_DIR}/"
@@ -386,6 +395,10 @@ case "${1}" in
     clean)
         rm -rf "${OUTPUT_DIR}"/*
         log_info "清理完成"
+        ;;
+    copy)
+        copy_kernel
+        log_info "复制完成"
         ;;
     all|*)
         main
