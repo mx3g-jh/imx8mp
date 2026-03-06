@@ -2707,7 +2707,7 @@ static struct pernet_operations ovs_net_ops = {
 };
 
 static const char * const ovs_drop_reasons[] = {
-#define S(x) [(x) & ~SKB_DROP_REASON_SUBSYS_MASK] = (#x),
+#define S(x)	(#x),
 	OVS_DROP_REASONS(S)
 #undef S
 };

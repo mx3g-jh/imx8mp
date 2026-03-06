@@ -834,8 +834,6 @@ int dtInsert(tid_t tid, struct inode *ip,
 	 * the full page.
 	 */
 	DT_GETSEARCH(ip, btstack->top, bn, mp, p, index);
-	if (p->header.freelist == 0)
-		return -EINVAL;
 
 	/*
 	 *	insert entry for new key

@@ -657,7 +657,7 @@ static int mxc_pcsi_set_fmt(struct v4l2_subdev *sd,
 	}
 
 	fmt->pad = source_pad->index;
-	fmt->format.code = MEDIA_BUS_FMT_UYVY8_2X8;
+	fmt->format.code = MEDIA_BUS_FMT_YUYV8_2X8;
 	ret = v4l2_subdev_call(sen_sd, pad, set_fmt, NULL, fmt);
 	if (ret < 0 && ret != -ENOIOCTLCMD)
 		return ret;
@@ -1001,7 +1001,7 @@ static const struct mxc_pcsi_plat_data imx91_pdata = {
 	.interface_ctrl_reg1	= 0xc,
 	.has_gasket		= false,
 	.def_hsync_pol		= 0,
-	.def_vsync_pol		= 1,
+	.def_vsync_pol		= 0,
 	.def_pixel_clk_pol	= 0,
 	.def_csi_in_data_type	= CSI_IN_DT_YVYU_8,
 	.pd_ops			= NULL,

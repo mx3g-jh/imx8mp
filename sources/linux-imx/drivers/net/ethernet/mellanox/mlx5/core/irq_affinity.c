@@ -48,7 +48,6 @@ static struct mlx5_irq *
 irq_pool_request_irq(struct mlx5_irq_pool *pool, struct irq_affinity_desc *af_desc)
 {
 	struct irq_affinity_desc auto_desc = {};
-	struct mlx5_irq *irq;
 	u32 irq_index;
 	int err;
 
@@ -65,12 +64,9 @@ irq_pool_request_irq(struct mlx5_irq_pool *pool, struct irq_affinity_desc *af_de
 		else
 			cpu_get(pool, cpumask_first(&af_desc->mask));
 	}
-	irq = mlx5_irq_alloc(pool, irq_index,
-			     cpumask_empty(&auto_desc.mask) ? af_desc : &auto_desc,
-			     NULL);
-	if (IS_ERR(irq))
-		xa_erase(&pool->irqs, irq_index);
-	return irq;
+	return mlx5_irq_alloc(pool, irq_index,
+			      cpumask_empty(&auto_desc.mask) ? af_desc : &auto_desc,
+			      NULL);
 }
 
 /* Looking for the IRQ with the smallest refcount that fits req_mask.

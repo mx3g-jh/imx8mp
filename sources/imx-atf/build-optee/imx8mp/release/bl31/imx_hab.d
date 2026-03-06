@@ -1,4 +1,4 @@
-/home/mx3g/linux/mpu/nxp/frdm-imx8mp/tmp/work/imx8mpfrdm-poky-linux/imx-atf/2.10+git/git/build-optee/imx8mp/release/bl31/imx_hab.o: \
+/home/mx3g/linux/mpu/manual-build/sources/imx-atf/build-optee/imx8mp/release/bl31/imx_hab.o: \
  plat/imx/imx8m/imx_hab.c include/common/runtime_svc.h \
  include/common/bl_common.h include/common/ep_info.h \
  include/common/param_header.h include/lib/libc/stdbool.h \

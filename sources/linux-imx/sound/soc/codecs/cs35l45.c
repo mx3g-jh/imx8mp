@@ -1067,10 +1067,7 @@ static irqreturn_t cs35l45_spk_safe_err(int irq, void *data)
 
 	i = irq - regmap_irq_get_virq(cs35l45->irq_data, 0);
 
-	if (i < 0 || i >= ARRAY_SIZE(cs35l45_irqs))
-		dev_err(cs35l45->dev, "Unspecified global error condition (%d) detected!\n", irq);
-	else
-		dev_err(cs35l45->dev, "%s condition detected!\n", cs35l45_irqs[i].name);
+	dev_err(cs35l45->dev, "%s condition detected!\n", cs35l45_irqs[i].name);
 
 	return IRQ_HANDLED;
 }

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0+
 
 /*
- * Copyright 2017-2020,2022,2023,2025 NXP
+ * Copyright 2017-2020,2022,2023 NXP
  */
 
 #include <linux/kernel.h>
@@ -18,13 +18,19 @@ static const enum dpu95_link_id dpu95_fe_link_id[] = {
 static void
 dpu95_fe_set_src_buf_dimensions(struct dpu95_fetchunit *fu,
 				unsigned int w, unsigned int h,
-				const struct drm_format_info *format)
+				const struct drm_format_info *format,
+				bool deinterlace)
 {
 	struct dpu95_soc *dpu = fu->dpu;
 	unsigned int width, height;
 
-	width = w / format->hsub;
-	height = h / format->vsub;
+	if (deinterlace) {
+		width = w;
+		height = h / 2;
+	} else {
+		width = w / format->hsub;
+		height = h / format->vsub;
+	}
 
 	switch (format->format) {
 	case DRM_FORMAT_NV12:
@@ -47,7 +53,8 @@ dpu95_fe_set_src_buf_dimensions(struct dpu95_fetchunit *fu,
 static void dpu95_fe_set_fmt(struct dpu95_fetchunit *fu,
 			     const struct drm_format_info *format,
 			     enum drm_color_encoding unused1,
-			     enum drm_color_range unused2)
+			     enum drm_color_range unused2,
+			     bool deinterlace)
 {
 	struct dpu95_soc *dpu = fu->dpu;
 	u32 bits = 0, shifts = 0;
@@ -105,8 +112,12 @@ static void dpu95_fe_set_fmt(struct dpu95_fetchunit *fu,
 }
 
 static void dpu95_fe_set_framedimensions(struct dpu95_fetchunit *fu,
-					 unsigned int w, unsigned int h)
+					 unsigned int w, unsigned int h,
+					 bool deinterlace)
 {
+	if (deinterlace)
+		h /= 2;
+
 	dpu95_fu_write(fu, FRAMEDIMENSIONS(fu), FRAMEWIDTH(w) | FRAMEHEIGHT(h));
 }
 

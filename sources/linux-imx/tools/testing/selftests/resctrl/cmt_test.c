@@ -37,7 +37,7 @@ static int check_results(struct resctrl_val_param *param, size_t span, int no_of
 	ksft_print_msg("Checking for pass/fail\n");
 	fp = fopen(param->filename, "r");
 	if (!fp) {
-		ksft_perror("Error in opening file");
+		perror("# Error in opening file\n");
 
 		return errno;
 	}

@@ -1,4 +1,4 @@
-/home/mx3g/linux/mpu/nxp/frdm-imx8mp/tmp/work/imx8mpfrdm-poky-linux/imx-atf/2.10+git/git/build-optee/imx8mp/release/bl31/xlat_tables_context.o: \
+/home/mx3g/linux/mpu/manual-build/sources/imx-atf/build-optee/imx8mp/release/bl31/xlat_tables_context.o: \
  lib/xlat_tables_v2/xlat_tables_context.c \
  include/arch/aarch64/arch_helpers.h include/lib/libc/cdefs.h \
  include/lib/libc/stdbool.h include/lib/libc/stdint.h \

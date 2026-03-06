@@ -80,30 +80,23 @@ static int pm_callback_power_on(struct kbase_device *kbdev)
 {
 	int ret = 1; /* Assume GPU has been powered off */
 	int error;
-#ifdef CONFIG_MALI_DEBUG
 	unsigned long flags;
-#endif
-#ifdef IMX_GPU_BLK_CTRL
 	struct imx_platform_ctx *ictx = kbdev->platform_context;
-#endif
 
 	dev_dbg(kbdev->dev, "%s %pK\n", __func__, (void *)kbdev->dev->pm_domain);
 
 	if (pm_runtime_enabled(kbdev->dev)) {
 		error = pm_runtime_get_sync(kbdev->dev);
 		dev_dbg(kbdev->dev, "power on pm_runtime_get_sync returned %d\n", error);
-#ifdef IMX_GPU_BLK_CTRL
 		if (ictx && (ictx->init_blk_ctrl == 0)
 				&& !IS_ERR_OR_NULL(ictx->reg_blk_ctrl)) {
 			ictx->init_blk_ctrl = 1;
 			writel(0x1, ictx->reg_blk_ctrl + 0x8);
 		}
-#endif
 		if (error == 1)
 			ret = 0; //gpu still powered on.
 	}
 
-#ifdef CONFIG_MALI_DEBUG
 	spin_lock_irqsave(&kbdev->hwaccess_lock, flags);
 	WARN_ON(kbdev->pm.backend.gpu_powered);
 	if (likely(kbdev->csf.firmware_inited)) {
@@ -111,7 +104,6 @@ static int pm_callback_power_on(struct kbase_device *kbdev)
 		WARN_ON(kbdev->pm.runtime_active);
 	}
 	spin_unlock_irqrestore(&kbdev->hwaccess_lock, flags);
-#endif
 
 	enable_gpu_power_control(kbdev);
 	CSTD_UNUSED(error);
@@ -121,20 +113,18 @@ static int pm_callback_power_on(struct kbase_device *kbdev)
 
 static void pm_callback_power_off(struct kbase_device *kbdev)
 {
-#ifdef IMX_GPU_BLK_CTRL
-	struct imx_platform_ctx *ictx = kbdev->platform_context;
-#endif
-#ifdef CONFIG_MALI_DEBUG
 	unsigned long flags;
+	struct imx_platform_ctx *ictx = kbdev->platform_context;
 
 	spin_lock_irqsave(&kbdev->hwaccess_lock, flags);
 	WARN_ON(kbdev->pm.backend.gpu_powered);
 	if (likely(kbdev->csf.firmware_inited)) {
+#ifdef CONFIG_MALI_DEBUG
 		WARN_ON(kbase_csf_scheduler_get_nr_active_csgs(kbdev));
+#endif
 		WARN_ON(kbdev->pm.backend.mcu_state != KBASE_MCU_OFF);
 	}
 	spin_unlock_irqrestore(&kbdev->hwaccess_lock, flags);
-#endif
 
 	/* Power down the GPU immediately */
 	disable_gpu_power_control(kbdev);
@@ -142,9 +132,7 @@ static void pm_callback_power_off(struct kbase_device *kbdev)
 	pm_runtime_mark_last_busy(kbdev->dev);
 	pm_runtime_put_autosuspend(kbdev->dev);
 
-#ifdef IMX_GPU_BLK_CTRL
 	ictx->init_blk_ctrl = 0;
-#endif
 }
 
 #ifdef KBASE_PM_RUNTIME
@@ -159,8 +147,15 @@ static int kbase_device_runtime_init(struct kbase_device *kbdev)
 	ret = dev_pm_domain_attach_list(kbdev->dev, &pd_data, &kbdev->pd_list);
 	if (ret < 0)
 		dev_dbg(kbdev->dev, "%s: didn't attach perf power domains, ret=%d", __func__, ret);
-	else if (ret == 2)
+	else if (ret == 2) {
+
 		kbdev->dev_gpuperf = kbdev->pd_list->pd_devs[DOMAIN_GPU_PERF];
+		ret = dev_pm_genpd_set_performance_state(kbdev->dev_gpuperf, 500000);
+		if (ret && !((ret == -ENODEV) || (ret == -EOPNOTSUPP)))
+			dev_err(kbdev->dev, "Failed to set opp (%d) (target 500MHz)\n", ret);
+
+		ret = 0;
+	}
 
 	dev_dbg(kbdev->dev, "get perf domain ret=%d, perf=%p\n", ret, kbdev->dev_gpuperf);
 
@@ -212,22 +207,14 @@ static void pm_callback_resume(struct kbase_device *kbdev)
 
 	ret = pm_callback_runtime_on(kbdev);
 
-#ifdef CONFIG_MALI_DEBUG
 	WARN_ON(ret);
-#else
-	CSTD_UNUSED(ret);
-#endif
 }
 
 static void pm_callback_suspend(struct kbase_device *kbdev)
 {
-#ifdef IMX_GPU_BLK_CTRL
 	struct imx_platform_ctx *ictx = kbdev->platform_context;
-#endif
 	pm_callback_runtime_off(kbdev);
-#ifdef IMX_GPU_BLK_CTRL
 	ictx->init_blk_ctrl = 0;
-#endif
 }
 
 struct kbase_pm_callback_conf pm_callbacks = {

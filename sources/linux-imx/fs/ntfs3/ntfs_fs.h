@@ -964,9 +964,9 @@ static inline bool run_is_empty(struct runs_tree *run)
 }
 
 /* NTFS uses quad aligned bitmaps. */
-static inline size_t ntfs3_bitmap_size(size_t bits)
+static inline size_t bitmap_size(size_t bits)
 {
-	return BITS_TO_U64(bits) * sizeof(u64);
+	return ALIGN((bits + 7) >> 3, 8);
 }
 
 #define _100ns2seconds 10000000

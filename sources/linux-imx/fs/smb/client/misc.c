@@ -1288,7 +1288,6 @@ int cifs_inval_name_dfs_link_error(const unsigned int xid,
 				   const char *full_path,
 				   bool *islink)
 {
-	struct TCP_Server_Info *server = tcon->ses->server;
 	struct cifs_ses *ses = tcon->ses;
 	size_t len;
 	char *path;
@@ -1305,12 +1304,12 @@ int cifs_inval_name_dfs_link_error(const unsigned int xid,
 	    !is_tcon_dfs(tcon))
 		return 0;
 
-	spin_lock(&server->srv_lock);
-	if (!server->leaf_fullpath) {
-		spin_unlock(&server->srv_lock);
+	spin_lock(&tcon->tc_lock);
+	if (!tcon->origin_fullpath) {
+		spin_unlock(&tcon->tc_lock);
 		return 0;
 	}
-	spin_unlock(&server->srv_lock);
+	spin_unlock(&tcon->tc_lock);
 
 	/*
 	 * Slow path - tcon is DFS and @full_path has prefix path, so attempt

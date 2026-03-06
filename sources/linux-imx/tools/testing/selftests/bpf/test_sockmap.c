@@ -63,7 +63,7 @@ int passed;
 int failed;
 int map_fd[9];
 struct bpf_map *maps[9];
-int prog_fd[9];
+int prog_fd[11];
 
 int txmsg_pass;
 int txmsg_redir;
@@ -680,8 +680,7 @@ static int msg_loop(int fd, int iov_count, int iov_length, int cnt,
 				}
 			}
 
-			if (recv > 0)
-				s->bytes_recvd += recv;
+			s->bytes_recvd += recv;
 
 			if (opt->check_recved_len && s->bytes_recvd > total_bytes) {
 				errno = EMSGSIZE;
@@ -1794,6 +1793,8 @@ int prog_attach_type[] = {
 	BPF_SK_MSG_VERDICT,
 	BPF_SK_MSG_VERDICT,
 	BPF_SK_MSG_VERDICT,
+	BPF_SK_MSG_VERDICT,
+	BPF_SK_MSG_VERDICT,
 };
 
 int prog_type[] = {
@@ -1801,6 +1802,8 @@ int prog_type[] = {
 	BPF_PROG_TYPE_SK_SKB,
 	BPF_PROG_TYPE_SK_SKB,
 	BPF_PROG_TYPE_SOCK_OPS,
+	BPF_PROG_TYPE_SK_MSG,
+	BPF_PROG_TYPE_SK_MSG,
 	BPF_PROG_TYPE_SK_MSG,
 	BPF_PROG_TYPE_SK_MSG,
 	BPF_PROG_TYPE_SK_MSG,

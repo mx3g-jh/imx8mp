@@ -233,9 +233,6 @@ cleanup()
 {
 	pre_cleanup
 
-	ip link set dev $swp2 down
-	ip link set dev $swp1 down
-
 	h2_destroy
 	h1_destroy
 

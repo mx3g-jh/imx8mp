@@ -373,8 +373,6 @@ static void ath12k_pci_ce_irqs_disable(struct ath12k_base *ab)
 {
 	int i;
 
-	clear_bit(ATH12K_FLAG_CE_IRQ_ENABLED, &ab->dev_flags);
-
 	for (i = 0; i < ab->hw_params->ce_count; i++) {
 		if (ath12k_ce_get_attr_flags(ab, i) & CE_ATTR_DIS_INTR)
 			continue;
@@ -408,10 +406,6 @@ static void ath12k_pci_ce_tasklet(struct tasklet_struct *t)
 static irqreturn_t ath12k_pci_ce_interrupt_handler(int irq, void *arg)
 {
 	struct ath12k_ce_pipe *ce_pipe = arg;
-	struct ath12k_base *ab = ce_pipe->ab;
-
-	if (!test_bit(ATH12K_FLAG_CE_IRQ_ENABLED, &ab->dev_flags))
-		return IRQ_HANDLED;
 
 	/* last interrupt received for this CE */
 	ce_pipe->timestamp = jiffies;
@@ -430,15 +424,12 @@ static void ath12k_pci_ext_grp_disable(struct ath12k_ext_irq_grp *irq_grp)
 		disable_irq_nosync(irq_grp->ab->irq_num[irq_grp->irqs[i]]);
 }
 
-static void __ath12k_pci_ext_irq_disable(struct ath12k_base *ab)
+static void __ath12k_pci_ext_irq_disable(struct ath12k_base *sc)
 {
 	int i;
 
-	if (!test_and_clear_bit(ATH12K_FLAG_EXT_IRQ_ENABLED, &ab->dev_flags))
-		return;
-
 	for (i = 0; i < ATH12K_EXT_IRQ_GRP_NUM_MAX; i++) {
-		struct ath12k_ext_irq_grp *irq_grp = &ab->ext_irq_grp[i];
+		struct ath12k_ext_irq_grp *irq_grp = &sc->ext_irq_grp[i];
 
 		ath12k_pci_ext_grp_disable(irq_grp);
 
@@ -492,10 +483,6 @@ static int ath12k_pci_ext_grp_napi_poll(struct napi_struct *napi, int budget)
 static irqreturn_t ath12k_pci_ext_interrupt_handler(int irq, void *arg)
 {
 	struct ath12k_ext_irq_grp *irq_grp = arg;
-	struct ath12k_base *ab = irq_grp->ab;
-
-	if (!test_bit(ATH12K_FLAG_EXT_IRQ_ENABLED, &ab->dev_flags))
-		return IRQ_HANDLED;
 
 	ath12k_dbg(irq_grp->ab, ATH12K_DBG_PCI, "ext irq:%d\n", irq);
 
@@ -638,8 +625,6 @@ static void ath12k_pci_init_qmi_ce_config(struct ath12k_base *ab)
 static void ath12k_pci_ce_irqs_enable(struct ath12k_base *ab)
 {
 	int i;
-
-	set_bit(ATH12K_FLAG_CE_IRQ_ENABLED, &ab->dev_flags);
 
 	for (i = 0; i < ab->hw_params->ce_count; i++) {
 		if (ath12k_ce_get_attr_flags(ab, i) & CE_ATTR_DIS_INTR)
@@ -970,8 +955,6 @@ void ath12k_pci_hif_ce_irq_disable(struct ath12k_base *ab)
 void ath12k_pci_ext_irq_enable(struct ath12k_base *ab)
 {
 	int i;
-
-	set_bit(ATH12K_FLAG_EXT_IRQ_ENABLED, &ab->dev_flags);
 
 	for (i = 0; i < ATH12K_EXT_IRQ_GRP_NUM_MAX; i++) {
 		struct ath12k_ext_irq_grp *irq_grp = &ab->ext_irq_grp[i];

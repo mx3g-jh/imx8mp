@@ -339,7 +339,7 @@
 		};
 
 		spdifin: audio-controller@400 {
-			compatible = "amlogic,sm1-spdifin",
+			compatible = "amlogic,g12a-spdifin",
 				     "amlogic,axg-spdifin";
 			reg = <0x0 0x400 0x0 0x30>;
 			#sound-dai-cells = <0>;
@@ -353,7 +353,7 @@
 		};
 
 		spdifout_a: audio-controller@480 {
-			compatible = "amlogic,sm1-spdifout",
+			compatible = "amlogic,g12a-spdifout",
 				     "amlogic,axg-spdifout";
 			reg = <0x0 0x480 0x0 0x50>;
 			#sound-dai-cells = <0>;
@@ -516,10 +516,6 @@
 &gpio_intc {
 	compatible = "amlogic,meson-sm1-gpio-intc",
 		     "amlogic,meson-gpio-intc";
-};
-
-&hdmi_tx {
-	power-domains = <&pwrc PWRC_SM1_VPU_ID>;
 };
 
 &pcie {

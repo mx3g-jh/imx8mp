@@ -1,4 +1,4 @@
-/home/mx3g/linux/mpu/nxp/frdm-imx8mp/tmp/work/imx8mpfrdm-poky-linux/imx-atf/2.10+git/git/build-optee/imx8mp/release/bl31/imx8m_caam.o: \
+/home/mx3g/linux/mpu/manual-build/sources/imx-atf/build-optee/imx8mp/release/bl31/imx8m_caam.o: \
  plat/imx/imx8m/imx8m_caam.c include/common/debug.h \
  include/lib/utils_def.h include/export/lib/utils_def_exp.h \
  include/lib/libc/cdefs.h include/lib/libc/stdarg.h \

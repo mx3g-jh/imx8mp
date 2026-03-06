@@ -730,8 +730,7 @@ static noinline int add_async_extent(struct async_chunk *cow,
 	struct async_extent *async_extent;
 
 	async_extent = kmalloc(sizeof(*async_extent), GFP_NOFS);
-	if (!async_extent)
-		return -ENOMEM;
+	BUG_ON(!async_extent); /* -ENOMEM */
 	async_extent->start = start;
 	async_extent->ram_size = ram_size;
 	async_extent->compressed_size = compressed_size;
@@ -1018,9 +1017,8 @@ again:
 	 * The async work queues will take care of doing actual allocation on
 	 * disk for these compressed pages, and will submit the bios.
 	 */
-	ret = add_async_extent(async_chunk, start, total_in, total_compressed, pages,
-			       nr_pages, compress_type);
-	BUG_ON(ret);
+	add_async_extent(async_chunk, start, total_in, total_compressed, pages,
+			 nr_pages, compress_type);
 	if (start + total_in < end) {
 		start += total_in;
 		cond_resched();
@@ -1032,9 +1030,8 @@ mark_incompressible:
 	if (!btrfs_test_opt(fs_info, FORCE_COMPRESS) && !inode->prop_compress)
 		inode->flags |= BTRFS_INODE_NOCOMPRESS;
 cleanup_and_bail_uncompressed:
-	ret = add_async_extent(async_chunk, start, end - start + 1, 0, NULL, 0,
-			       BTRFS_COMPRESS_NONE);
-	BUG_ON(ret);
+	add_async_extent(async_chunk, start, end - start + 1, 0, NULL, 0,
+			 BTRFS_COMPRESS_NONE);
 free_pages:
 	if (pages) {
 		for (i = 0; i < nr_pages; i++) {
@@ -4148,7 +4145,6 @@ err:
 
 	btrfs_i_size_write(dir, dir->vfs_inode.i_size - name->len * 2);
 	inode_inc_iversion(&inode->vfs_inode);
-	inode_set_ctime_current(&inode->vfs_inode);
 	inode_inc_iversion(&dir->vfs_inode);
 	inode_set_ctime_current(&inode->vfs_inode);
 	dir->vfs_inode.i_mtime = inode_set_ctime_current(&dir->vfs_inode);
@@ -4375,14 +4371,7 @@ static noinline int may_destroy_subvol(struct btrfs_root *root)
 	ret = btrfs_search_slot(NULL, fs_info->tree_root, &key, path, 0, 0);
 	if (ret < 0)
 		goto out;
-	if (ret == 0) {
-		/*
-		 * Key with offset -1 found, there would have to exist a root
-		 * with such id, but this is out of valid range.
-		 */
-		ret = -EUCLEAN;
-		goto out;
-	}
+	BUG_ON(ret == 0);
 
 	ret = 0;
 	if (path->slots[0] > 0) {
@@ -5669,7 +5658,7 @@ struct inode *btrfs_lookup_dentry(struct inode *dir, struct dentry *dentry)
 	struct inode *inode;
 	struct btrfs_root *root = BTRFS_I(dir)->root;
 	struct btrfs_root *sub_root = root;
-	struct btrfs_key location = { 0 };
+	struct btrfs_key location;
 	u8 di_type = 0;
 	int ret = 0;
 
@@ -8696,7 +8685,7 @@ static int btrfs_getattr(struct mnt_idmap *idmap,
 	u64 delalloc_bytes;
 	u64 inode_bytes;
 	struct inode *inode = d_inode(path->dentry);
-	u32 blocksize = btrfs_sb(inode->i_sb)->sectorsize;
+	u32 blocksize = inode->i_sb->s_blocksize;
 	u32 bi_flags = BTRFS_I(inode)->flags;
 	u32 bi_ro_flags = BTRFS_I(inode)->ro_flags;
 

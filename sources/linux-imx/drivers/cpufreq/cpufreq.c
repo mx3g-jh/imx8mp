@@ -1422,8 +1422,7 @@ static int cpufreq_online(unsigned int cpu)
 		}
 
 		/* Let the per-policy boost flag mirror the cpufreq_driver boost during init */
-		if (cpufreq_boost_enabled() && policy_has_boost_freq(policy))
-			policy->boost_enabled = true;
+		policy->boost_enabled = cpufreq_boost_enabled() && policy_has_boost_freq(policy);
 
 		/*
 		 * The initialization has succeeded and the policy is online.

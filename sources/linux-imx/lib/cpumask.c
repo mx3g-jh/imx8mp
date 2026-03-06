@@ -146,7 +146,9 @@ unsigned int cpumask_local_spread(unsigned int i, int node)
 	/* Wrap: we always want a cpu. */
 	i %= num_online_cpus();
 
-	cpu = sched_numa_find_nth_cpu(cpu_online_mask, i, node);
+	cpu = (node == NUMA_NO_NODE) ?
+		cpumask_nth(i, cpu_online_mask) :
+		sched_numa_find_nth_cpu(cpu_online_mask, i, node);
 
 	WARN_ON(cpu >= nr_cpu_ids);
 	return cpu;

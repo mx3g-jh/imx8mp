@@ -92,8 +92,7 @@ static int __ref __early_map_kernel_hugepage(unsigned long va, phys_addr_t pa,
 		return -EINVAL;
 
 	set_huge_pte_at(&init_mm, va, ptep,
-			pte_mkhuge(pfn_pte(pa >> PAGE_SHIFT, prot)),
-			1UL << mmu_psize_to_shift(psize));
+			pte_mkhuge(pfn_pte(pa >> PAGE_SHIFT, prot)), psize);
 
 	return 0;
 }

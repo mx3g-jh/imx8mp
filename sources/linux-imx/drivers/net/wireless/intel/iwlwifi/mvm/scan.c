@@ -1718,10 +1718,7 @@ iwl_mvm_umac_scan_fill_6g_chan_list(struct iwl_mvm *mvm,
 				break;
 		}
 
-		if (k == idex_b && idex_b < SCAN_BSSID_MAX_SIZE &&
-		    !WARN_ONCE(!is_valid_ether_addr(scan_6ghz_params[j].bssid),
-			       "scan: invalid BSSID at index %u, index_b=%u\n",
-			       j, idex_b)) {
+		if (k == idex_b && idex_b < SCAN_BSSID_MAX_SIZE) {
 			memcpy(&pp->bssid_array[idex_b++],
 			       scan_6ghz_params[j].bssid, ETH_ALEN);
 		}
@@ -3242,11 +3239,10 @@ static int iwl_mvm_umac_scan_abort(struct iwl_mvm *mvm, int type)
 
 	ret = iwl_mvm_send_cmd_pdu(mvm,
 				   WIDE_ID(IWL_ALWAYS_LONG_GROUP, SCAN_ABORT_UMAC),
-				   CMD_SEND_IN_RFKILL, sizeof(cmd), &cmd);
+				   0, sizeof(cmd), &cmd);
 	if (!ret)
 		mvm->scan_uid_status[uid] = type << IWL_MVM_SCAN_STOPPING_SHIFT;
 
-	IWL_DEBUG_SCAN(mvm, "Scan abort: ret=%d\n", ret);
 	return ret;
 }
 
@@ -3413,7 +3409,7 @@ int iwl_mvm_scan_stop(struct iwl_mvm *mvm, int type, bool notify)
 	if (!(mvm->scan_status & type))
 		return 0;
 
-	if (!test_bit(STATUS_DEVICE_ENABLED, &mvm->trans->status)) {
+	if (iwl_mvm_is_radio_killed(mvm)) {
 		ret = 0;
 		goto out;
 	}

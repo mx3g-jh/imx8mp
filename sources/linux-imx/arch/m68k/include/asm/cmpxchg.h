@@ -32,7 +32,7 @@ static inline unsigned long __arch_xchg(unsigned long x, volatile void * ptr, in
 		x = tmp;
 		break;
 	default:
-		x = __invalid_xchg_size(x, ptr, size);
+		tmp = __invalid_xchg_size(x, ptr, size);
 		break;
 	}
 

@@ -474,7 +474,14 @@ struct isct_req_data {
 
 struct isct_resp_query {
 	__le32 entry_id;
-	struct isct_stse_data stse;
+	__le32 rx_count;
+	__le32 resv1;
+	__le32 msdu_drop_count;
+	__le32 resv2;
+	__le32 policer_drop_count;
+	__le32 resv3;
+	__le32 sg_drop_count;
+	__le32 resv4;
 };
 
 /* Ingress Port Filter Table Request and Response Data Buffer Format */

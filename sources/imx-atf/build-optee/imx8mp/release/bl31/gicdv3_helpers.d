@@ -1,4 +1,4 @@
-/home/mx3g/linux/mpu/nxp/frdm-imx8mp/tmp/work/imx8mpfrdm-poky-linux/imx-atf/2.10+git/git/build-optee/imx8mp/release/bl31/gicdv3_helpers.o: \
+/home/mx3g/linux/mpu/manual-build/sources/imx-atf/build-optee/imx8mp/release/bl31/gicdv3_helpers.o: \
  drivers/arm/gic/v3/gicdv3_helpers.c include/lib/libc/stdint.h \
  include/lib/libc/limits.h include/lib/libc/aarch64/limits_.h \
  include/lib/libc/aarch64/stdint_.h drivers/arm/gic/v3/gicv3_private.h \

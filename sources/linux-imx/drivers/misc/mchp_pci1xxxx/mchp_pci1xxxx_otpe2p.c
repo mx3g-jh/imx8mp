@@ -153,6 +153,7 @@ static int pci1xxxx_eeprom_read(void *priv_t, unsigned int off,
 
 		buf[byte] = readl(rb + MMAP_EEPROM_OFFSET(EEPROM_DATA_REG));
 	}
+	ret = byte;
 error:
 	release_sys_lock(priv);
 	return ret;
@@ -196,6 +197,7 @@ static int pci1xxxx_eeprom_write(void *priv_t, unsigned int off,
 			goto error;
 		}
 	}
+	ret = byte;
 error:
 	release_sys_lock(priv);
 	return ret;
@@ -256,6 +258,7 @@ static int pci1xxxx_otp_read(void *priv_t, unsigned int off,
 
 		buf[byte] = readl(rb + MMAP_OTP_OFFSET(OTP_RD_DATA_OFFSET));
 	}
+	ret = byte;
 error:
 	release_sys_lock(priv);
 	return ret;
@@ -312,6 +315,7 @@ static int pci1xxxx_otp_write(void *priv_t, unsigned int off,
 			goto error;
 		}
 	}
+	ret = byte;
 error:
 	release_sys_lock(priv);
 	return ret;

@@ -1,14 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0+
 
 /*
- * Copyright 2017-2019,2023,2025 NXP
+ * Copyright 2017-2019,2023 NXP
  */
 
 #include <linux/io.h>
 #include <linux/kernel.h>
 #include <linux/sizes.h>
-
-#include <drm/drm_plane.h>
 
 #include "dpu95.h"
 
@@ -37,7 +35,7 @@ static const enum dpu95_link_id dpu95_hs_link_id[] = {
 	DPU95_LINK_ID_HSCALER4, DPU95_LINK_ID_HSCALER9
 };
 
-static const enum dpu95_link_id src_sels[2][7] = {
+static const enum dpu95_link_id src_sels[2][6] = {
 	{
 		DPU95_LINK_ID_NONE,
 		DPU95_LINK_ID_FETCHYUV0,
@@ -45,10 +43,8 @@ static const enum dpu95_link_id src_sels[2][7] = {
 		DPU95_LINK_ID_FETCHYUV2,
 		DPU95_LINK_ID_FETCHYUV3,
 		DPU95_LINK_ID_MATRIX4,
-		DPU95_LINK_ID_VSCALER4,
 	}, {
 		DPU95_LINK_ID_NONE,
-		DPU95_LINK_ID_VSCALER9,
 		DPU95_LINK_ID_FILTER9,
 	},
 };
@@ -174,11 +170,9 @@ void dpu95_hs_output_size(struct dpu95_hscaler *hs, u32 line_num)
 }
 
 void dpu95_hs_filter_mode(struct dpu95_hscaler *hs,
-			  enum drm_scaling_filter filter)
+			  enum dpu95_scaler_filter_mode m)
 {
-	dpu95_hs_write_mask(hs, CONTROL, FILTER_MODE_MASK,
-			    filter == DRM_SCALING_FILTER_DEFAULT ?
-			    FILTER_MODE(SCALER_LINEAR) : FILTER_MODE(SCALER_NEAREST));
+	dpu95_hs_write_mask(hs, CONTROL, FILTER_MODE_MASK, FILTER_MODE(m));
 }
 
 void dpu95_hs_scale_mode(struct dpu95_hscaler *hs,

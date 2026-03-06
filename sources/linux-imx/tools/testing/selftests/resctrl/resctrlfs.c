@@ -19,7 +19,7 @@ static int find_resctrl_mount(char *buffer)
 
 	mounts = fopen("/proc/mounts", "r");
 	if (!mounts) {
-		ksft_perror("/proc/mounts");
+		perror("/proc/mounts");
 		return -ENXIO;
 	}
 	while (!feof(mounts)) {
@@ -68,7 +68,7 @@ int mount_resctrlfs(void)
 	ksft_print_msg("Mounting resctrl to \"%s\"\n", RESCTRL_PATH);
 	ret = mount("resctrl", RESCTRL_PATH, "resctrl", 0, NULL);
 	if (ret)
-		ksft_perror("mount");
+		perror("# mount");
 
 	return ret;
 }
@@ -85,7 +85,7 @@ int umount_resctrlfs(void)
 		return ret;
 
 	if (umount(mountpoint)) {
-		ksft_perror("Unable to umount resctrl");
+		perror("# Unable to umount resctrl");
 
 		return errno;
 	}
@@ -114,12 +114,12 @@ int get_resource_id(int cpu_no, int *resource_id)
 
 	fp = fopen(phys_pkg_path, "r");
 	if (!fp) {
-		ksft_perror("Failed to open physical_package_id");
+		perror("Failed to open physical_package_id");
 
 		return -1;
 	}
 	if (fscanf(fp, "%d", resource_id) <= 0) {
-		ksft_perror("Could not get socket number or l3 id");
+		perror("Could not get socket number or l3 id");
 		fclose(fp);
 
 		return -1;
@@ -148,7 +148,7 @@ int get_cache_size(int cpu_no, char *cache_type, unsigned long *cache_size)
 	} else if (!strcmp(cache_type, "L2")) {
 		cache_num = 2;
 	} else {
-		ksft_print_msg("Invalid cache level\n");
+		perror("Invalid cache level");
 		return -1;
 	}
 
@@ -156,12 +156,12 @@ int get_cache_size(int cpu_no, char *cache_type, unsigned long *cache_size)
 		cpu_no, cache_num);
 	fp = fopen(cache_path, "r");
 	if (!fp) {
-		ksft_perror("Failed to open cache size");
+		perror("Failed to open cache size");
 
 		return -1;
 	}
 	if (fscanf(fp, "%s", cache_str) <= 0) {
-		ksft_perror("Could not get cache_size");
+		perror("Could not get cache_size");
 		fclose(fp);
 
 		return -1;
@@ -213,12 +213,12 @@ int get_cbm_mask(char *cache_type, char *cbm_mask)
 
 	fp = fopen(cbm_mask_path, "r");
 	if (!fp) {
-		ksft_perror("Failed to open cache level");
+		perror("Failed to open cache level");
 
 		return -1;
 	}
 	if (fscanf(fp, "%s", cbm_mask) <= 0) {
-		ksft_perror("Could not get max cbm_mask");
+		perror("Could not get max cbm_mask");
 		fclose(fp);
 
 		return -1;
@@ -245,12 +245,12 @@ int get_core_sibling(int cpu_no)
 
 	fp = fopen(core_siblings_path, "r");
 	if (!fp) {
-		ksft_perror("Failed to open core siblings path");
+		perror("Failed to open core siblings path");
 
 		return -1;
 	}
 	if (fscanf(fp, "%s", cpu_list_str) <= 0) {
-		ksft_perror("Could not get core_siblings list");
+		perror("Could not get core_siblings list");
 		fclose(fp);
 
 		return -1;
@@ -285,12 +285,64 @@ int taskset_benchmark(pid_t bm_pid, int cpu_no)
 	CPU_SET(cpu_no, &my_set);
 
 	if (sched_setaffinity(bm_pid, sizeof(cpu_set_t), &my_set)) {
-		ksft_perror("Unable to taskset benchmark");
+		perror("Unable to taskset benchmark");
 
 		return -1;
 	}
 
 	return 0;
+}
+
+/*
+ * run_benchmark - Run a specified benchmark or fill_buf (default benchmark)
+ *		   in specified signal. Direct benchmark stdio to /dev/null.
+ * @signum:	signal number
+ * @info:	signal info
+ * @ucontext:	user context in signal handling
+ *
+ * Return: void
+ */
+void run_benchmark(int signum, siginfo_t *info, void *ucontext)
+{
+	int operation, ret, memflush;
+	char **benchmark_cmd;
+	size_t span;
+	bool once;
+	FILE *fp;
+
+	benchmark_cmd = info->si_ptr;
+
+	/*
+	 * Direct stdio of child to /dev/null, so that only parent writes to
+	 * stdio (console)
+	 */
+	fp = freopen("/dev/null", "w", stdout);
+	if (!fp)
+		PARENT_EXIT("Unable to direct benchmark status to /dev/null");
+
+	if (strcmp(benchmark_cmd[0], "fill_buf") == 0) {
+		/* Execute default fill_buf benchmark */
+		span = strtoul(benchmark_cmd[1], NULL, 10);
+		memflush =  atoi(benchmark_cmd[2]);
+		operation = atoi(benchmark_cmd[3]);
+		if (!strcmp(benchmark_cmd[4], "true"))
+			once = true;
+		else if (!strcmp(benchmark_cmd[4], "false"))
+			once = false;
+		else
+			PARENT_EXIT("Invalid once parameter");
+
+		if (run_fill_buf(span, memflush, operation, once))
+			fprintf(stderr, "Error in running fill buffer\n");
+	} else {
+		/* Execute specified benchmark */
+		ret = execvp(benchmark_cmd[0], benchmark_cmd);
+		if (ret)
+			perror("wrong\n");
+	}
+
+	fclose(stdout);
+	PARENT_EXIT("Unable to run specified benchmark");
 }
 
 /*
@@ -324,7 +376,7 @@ static int create_grp(const char *grp_name, char *grp, const char *parent_grp)
 		}
 		closedir(dp);
 	} else {
-		ksft_perror("Unable to open resctrl for group");
+		perror("Unable to open resctrl for group");
 
 		return -1;
 	}
@@ -332,7 +384,7 @@ static int create_grp(const char *grp_name, char *grp, const char *parent_grp)
 	/* Requested grp doesn't exist, hence create it */
 	if (found_grp == 0) {
 		if (mkdir(grp, 0) == -1) {
-			ksft_perror("Unable to create group");
+			perror("Unable to create group");
 
 			return -1;
 		}
@@ -347,12 +399,12 @@ static int write_pid_to_tasks(char *tasks, pid_t pid)
 
 	fp = fopen(tasks, "w");
 	if (!fp) {
-		ksft_perror("Failed to open tasks file");
+		perror("Failed to open tasks file");
 
 		return -1;
 	}
 	if (fprintf(fp, "%d\n", pid) < 0) {
-		ksft_print_msg("Failed to write pid to tasks file\n");
+		perror("Failed to wr pid to tasks file");
 		fclose(fp);
 
 		return -1;
@@ -419,7 +471,7 @@ int write_bm_pid_to_resctrl(pid_t bm_pid, char *ctrlgrp, char *mongrp,
 out:
 	ksft_print_msg("Writing benchmark parameters to resctrl FS\n");
 	if (ret)
-		ksft_print_msg("Failed writing to resctrlfs\n");
+		perror("# writing to resctrlfs");
 
 	return ret;
 }
@@ -606,7 +658,7 @@ int filter_dmesg(void)
 
 	ret = pipe(pipefds);
 	if (ret) {
-		ksft_perror("pipe");
+		perror("pipe");
 		return ret;
 	}
 	fflush(stdout);
@@ -615,13 +667,13 @@ int filter_dmesg(void)
 		close(pipefds[0]);
 		dup2(pipefds[1], STDOUT_FILENO);
 		execlp("dmesg", "dmesg", NULL);
-		ksft_perror("Executing dmesg");
+		perror("executing dmesg");
 		exit(1);
 	}
 	close(pipefds[1]);
 	fp = fdopen(pipefds[0], "r");
 	if (!fp) {
-		ksft_perror("fdopen(pipe)");
+		perror("fdopen(pipe)");
 		kill(pid, SIGTERM);
 
 		return -1;

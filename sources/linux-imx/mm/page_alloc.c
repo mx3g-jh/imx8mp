@@ -302,7 +302,7 @@ EXPORT_SYMBOL(nr_online_nodes);
 
 static bool page_contains_unaccepted(struct page *page, unsigned int order);
 static void accept_page(struct page *page, unsigned int order);
-static bool cond_accept_memory(struct zone *zone, unsigned int order);
+static bool try_to_accept_memory(struct zone *zone, unsigned int order);
 static inline bool has_unaccepted_memory(void);
 static bool __free_unaccepted(struct page *page);
 
@@ -519,15 +519,10 @@ out:
 
 static inline unsigned int order_to_pindex(int migratetype, int order)
 {
-	bool __maybe_unused movable;
-
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 	if (order > PAGE_ALLOC_COSTLY_ORDER) {
 		VM_BUG_ON(order != pageblock_order);
-
-		movable = migratetype == MIGRATE_MOVABLE;
-
-		return NR_LOWORDER_PCP_LISTS + movable;
+		return NR_LOWORDER_PCP_LISTS;
 	}
 #else
 	VM_BUG_ON(order > PAGE_ALLOC_COSTLY_ORDER);
@@ -541,7 +536,7 @@ static inline int pindex_to_order(unsigned int pindex)
 	int order = pindex / MIGRATE_PCPTYPES;
 
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
-	if (pindex >= NR_LOWORDER_PCP_LISTS)
+	if (pindex == NR_LOWORDER_PCP_LISTS)
 		order = pageblock_order;
 #else
 	VM_BUG_ON(order > PAGE_ALLOC_COSTLY_ORDER);
@@ -2185,21 +2180,14 @@ void drain_zone_pages(struct zone *zone, struct per_cpu_pages *pcp)
  */
 static void drain_pages_zone(unsigned int cpu, struct zone *zone)
 {
-	struct per_cpu_pages *pcp = per_cpu_ptr(zone->per_cpu_pageset, cpu);
-	int count;
+	struct per_cpu_pages *pcp;
 
-	do {
+	pcp = per_cpu_ptr(zone->per_cpu_pageset, cpu);
+	if (pcp->count) {
 		spin_lock(&pcp->lock);
-		count = pcp->count;
-		if (count) {
-			int to_drain = min(count,
-				pcp->batch << CONFIG_PCP_BATCH_SCALE_MAX);
-
-			free_pcppages_bulk(zone, to_drain, pcp, 0);
-			count -= to_drain;
-		}
+		free_pcppages_bulk(zone, pcp->count, pcp, 0);
 		spin_unlock(&pcp->lock);
-	} while (count);
+	}
 }
 
 /*
@@ -2350,7 +2338,7 @@ static int nr_pcp_free(struct per_cpu_pages *pcp, int high, bool free_high)
 	 * freeing of pages without any allocation.
 	 */
 	batch <<= pcp->free_factor;
-	if (batch < max_nr_free && pcp->free_factor < CONFIG_PCP_BATCH_SCALE_MAX)
+	if (batch < max_nr_free)
 		pcp->free_factor++;
 	batch = clamp(batch, min_nr_free, max_nr_free);
 
@@ -2830,6 +2818,9 @@ static inline long __zone_watermark_unusable_free(struct zone *z,
 	if (!(alloc_flags & ALLOC_CMA))
 		unusable_free += zone_page_state(z, NR_FREE_CMA_PAGES);
 #endif
+#ifdef CONFIG_UNACCEPTED_MEMORY
+	unusable_free += zone_page_state(z, NR_UNACCEPTED);
+#endif
 
 	return unusable_free;
 }
@@ -3123,16 +3114,16 @@ retry:
 			}
 		}
 
-		cond_accept_memory(zone, order);
-
 		mark = wmark_pages(zone, alloc_flags & ALLOC_WMARK_MASK);
 		if (!zone_watermark_fast(zone, order, mark,
 				       ac->highest_zoneidx, alloc_flags,
 				       gfp_mask)) {
 			int ret;
 
-			if (cond_accept_memory(zone, order))
-				goto try_this_zone;
+			if (has_unaccepted_memory()) {
+				if (try_to_accept_memory(zone, order))
+					goto try_this_zone;
+			}
 
 #ifdef CONFIG_DEFERRED_STRUCT_PAGE_INIT
 			/*
@@ -3186,8 +3177,10 @@ try_this_zone:
 
 			return page;
 		} else {
-			if (cond_accept_memory(zone, order))
-				goto try_this_zone;
+			if (has_unaccepted_memory()) {
+				if (try_to_accept_memory(zone, order))
+					goto try_this_zone;
+			}
 
 #ifdef CONFIG_DEFERRED_STRUCT_PAGE_INIT
 			/* Try again if zone has deferred pages */
@@ -6614,6 +6607,9 @@ static bool try_to_accept_memory_one(struct zone *zone)
 	struct page *page;
 	bool last;
 
+	if (list_empty(&zone->unaccepted_pages))
+		return false;
+
 	spin_lock_irqsave(&zone->lock, flags);
 	page = list_first_entry_or_null(&zone->unaccepted_pages,
 					struct page, lru);
@@ -6639,29 +6635,23 @@ static bool try_to_accept_memory_one(struct zone *zone)
 	return true;
 }
 
-static bool cond_accept_memory(struct zone *zone, unsigned int order)
+static bool try_to_accept_memory(struct zone *zone, unsigned int order)
 {
 	long to_accept;
-	bool ret = false;
-
-	if (!has_unaccepted_memory())
-		return false;
-
-	if (list_empty(&zone->unaccepted_pages))
-		return false;
+	int ret = false;
 
 	/* How much to accept to get to high watermark? */
 	to_accept = high_wmark_pages(zone) -
 		    (zone_page_state(zone, NR_FREE_PAGES) -
-		    __zone_watermark_unusable_free(zone, order, 0) -
-		    zone_page_state(zone, NR_UNACCEPTED));
+		    __zone_watermark_unusable_free(zone, order, 0));
 
-	while (to_accept > 0) {
+	/* Accept at least one page */
+	do {
 		if (!try_to_accept_memory_one(zone))
 			break;
 		ret = true;
 		to_accept -= MAX_ORDER_NR_PAGES;
-	}
+	} while (to_accept > 0);
 
 	return ret;
 }
@@ -6704,7 +6694,7 @@ static void accept_page(struct page *page, unsigned int order)
 {
 }
 
-static bool cond_accept_memory(struct zone *zone, unsigned int order)
+static bool try_to_accept_memory(struct zone *zone, unsigned int order)
 {
 	return false;
 }

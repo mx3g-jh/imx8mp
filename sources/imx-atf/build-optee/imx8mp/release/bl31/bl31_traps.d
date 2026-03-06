@@ -1,4 +1,4 @@
-/home/mx3g/linux/mpu/nxp/frdm-imx8mp/tmp/work/imx8mpfrdm-poky-linux/imx-atf/2.10+git/git/build-optee/imx8mp/release/bl31/bl31_traps.o: \
+/home/mx3g/linux/mpu/manual-build/sources/imx-atf/build-optee/imx8mp/release/bl31/bl31_traps.o: \
  bl31/bl31_traps.c include/bl31/sync_handle.h include/lib/libc/stdbool.h \
  include/lib/el3_runtime/aarch64/context.h \
  include/lib/el3_runtime/cpu_data.h \

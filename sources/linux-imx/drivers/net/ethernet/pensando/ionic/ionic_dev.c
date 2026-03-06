@@ -165,29 +165,14 @@ void ionic_dev_teardown(struct ionic *ionic)
 }
 
 /* Devcmd Interface */
-static bool __ionic_is_fw_running(struct ionic_dev *idev, u8 *status_ptr)
+bool ionic_is_fw_running(struct ionic_dev *idev)
 {
-	u8 fw_status;
-
-	if (!idev->dev_info_regs) {
-		if (status_ptr)
-			*status_ptr = 0xff;
-		return false;
-	}
-
-	fw_status = ioread8(&idev->dev_info_regs->fw_status);
-	if (status_ptr)
-		*status_ptr = fw_status;
+	u8 fw_status = ioread8(&idev->dev_info_regs->fw_status);
 
 	/* firmware is useful only if the running bit is set and
 	 * fw_status != 0xff (bad PCI read)
 	 */
 	return (fw_status != 0xff) && (fw_status & IONIC_FW_STS_F_RUNNING);
-}
-
-bool ionic_is_fw_running(struct ionic_dev *idev)
-{
-	return __ionic_is_fw_running(idev, NULL);
 }
 
 int ionic_heartbeat_check(struct ionic *ionic)
@@ -214,8 +199,10 @@ do_check_time:
 		goto do_check_time;
 	}
 
+	fw_status = ioread8(&idev->dev_info_regs->fw_status);
+
 	/* If fw_status is not ready don't bother with the generation */
-	if (!__ionic_is_fw_running(idev, &fw_status)) {
+	if (!ionic_is_fw_running(idev)) {
 		fw_status_ready = false;
 	} else {
 		fw_generation = fw_status & IONIC_FW_STS_F_GENERATION;
@@ -319,32 +306,22 @@ do_check_time:
 
 u8 ionic_dev_cmd_status(struct ionic_dev *idev)
 {
-	if (!idev->dev_cmd_regs)
-		return (u8)PCI_ERROR_RESPONSE;
 	return ioread8(&idev->dev_cmd_regs->comp.comp.status);
 }
 
 bool ionic_dev_cmd_done(struct ionic_dev *idev)
 {
-	if (!idev->dev_cmd_regs)
-		return false;
 	return ioread32(&idev->dev_cmd_regs->done) & IONIC_DEV_CMD_DONE;
 }
 
 void ionic_dev_cmd_comp(struct ionic_dev *idev, union ionic_dev_cmd_comp *comp)
 {
-	if (!idev->dev_cmd_regs)
-		return;
 	memcpy_fromio(comp, &idev->dev_cmd_regs->comp, sizeof(*comp));
 }
 
 void ionic_dev_cmd_go(struct ionic_dev *idev, union ionic_dev_cmd *cmd)
 {
 	idev->opcode = cmd->cmd.opcode;
-
-	if (!idev->dev_cmd_regs)
-		return;
-
 	memcpy_toio(&idev->dev_cmd_regs->cmd, cmd, sizeof(*cmd));
 	iowrite32(0, &idev->dev_cmd_regs->done);
 	iowrite32(1, &idev->dev_cmd_regs->doorbell);

@@ -11,10 +11,6 @@
 	};
 };
 
-&pmu_io_domains {
-	vccio3-supply = <&vccio_sd>;
-};
-
 &sdmmc0 {
 	bus-width = <4>;
 	cap-mmc-highspeed;

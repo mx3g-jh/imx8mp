@@ -530,6 +530,10 @@
 				};
 			};
 		};
+
+		codec {
+			mic-in-differential;
+		};
 	};
 };
 

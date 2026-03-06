@@ -22,7 +22,6 @@
  ****************************************************************************/
 
 struct neutron_device;
-struct neutron_buffer;
 struct neutron_uapi_inference_args;
 struct file;
 
@@ -37,7 +36,6 @@ enum neutron_cmd_type {
 /**
  * struct neutron_inference - Inference struct
  * @ndev:			Neutron device
- * @buf:			Neutron buffer
  * @file:			File handle
  * @kref:			Reference counter
  * @waitq:			Wait queue, to wakeup poll thread in userspace
@@ -49,7 +47,6 @@ enum neutron_cmd_type {
  */
 struct neutron_inference {
 	struct neutron_device    *ndev;
-	struct neutron_buffer    *buf;
 	struct file              *file;
 	struct kref              kref;
 	wait_queue_head_t        waitq;

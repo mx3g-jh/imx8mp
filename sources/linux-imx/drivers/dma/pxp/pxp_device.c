@@ -887,9 +887,7 @@ static long pxp_device_ioctl(struct file *filp,
 			ret = copy_to_user((void __user *)arg, &buffer,
 					   sizeof(struct pxp_mem_desc));
 			if (ret) {
-				ret = pxp_buffer_handle_delete(file_priv, buffer.handle);
-				if (ret)
-					return ret;
+				pxp_buffer_handle_delete(file_priv, buffer.handle);
 				pxp_free_dma_buffer(obj);
 				kfree(obj);
 				return -EFAULT;

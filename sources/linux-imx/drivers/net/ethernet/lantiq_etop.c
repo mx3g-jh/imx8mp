@@ -217,9 +217,9 @@ ltq_etop_free_channel(struct net_device *dev, struct ltq_etop_chan *ch)
 	if (ch->dma.irq)
 		free_irq(ch->dma.irq, priv);
 	if (IS_RX(ch->idx)) {
-		struct ltq_dma_channel *dma = &ch->dma;
+		int desc;
 
-		for (dma->desc = 0; dma->desc < LTQ_DESC_NUM; dma->desc++)
+		for (desc = 0; desc < LTQ_DESC_NUM; desc++)
 			dev_kfree_skb_any(ch->skb[ch->dma.desc]);
 	}
 }

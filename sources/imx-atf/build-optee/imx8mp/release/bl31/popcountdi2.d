@@ -1,4 +1,4 @@
-/home/mx3g/linux/mpu/nxp/frdm-imx8mp/tmp/work/imx8mpfrdm-poky-linux/imx-atf/2.10+git/git/build-optee/imx8mp/release/bl31/popcountdi2.o: \
+/home/mx3g/linux/mpu/manual-build/sources/imx-atf/build-optee/imx8mp/release/bl31/popcountdi2.o: \
  lib/compiler-rt/builtins/popcountdi2.c \
  lib/compiler-rt/builtins/int_lib.h include/lib/libc/aarch64/float.h \
  include/lib/libc/sys/cdefs.h include/lib/libc/limits.h \

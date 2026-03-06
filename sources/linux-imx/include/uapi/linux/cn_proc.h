@@ -69,7 +69,8 @@ struct proc_input {
 
 static inline enum proc_cn_event valid_event(enum proc_cn_event ev_type)
 {
-	return (enum proc_cn_event)(ev_type & PROC_EVENT_ALL);
+	ev_type &= PROC_EVENT_ALL;
+	return ev_type;
 }
 
 /*

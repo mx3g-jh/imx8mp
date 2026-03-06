@@ -677,9 +677,6 @@ static void enetc4_pl_mac_link_up(struct phylink_config *config,
 	enetc4_set_rx_pause(pf, rx_pause);
 	enetc4_enable_mac(pf, true);
 
-	priv->eee.eee_active = phylink_init_eee(priv->phylink, true) >= 0;
-	enetc_eee_mode_set(si->ndev, priv->eee.eee_active);
-
 	if (si->hw_features & ENETC_SI_F_QBU)
 		enetc_mm_link_state_update(priv, true);
 
@@ -695,9 +692,6 @@ static void enetc4_pl_mac_link_down(struct phylink_config *config,
 	struct enetc_ndev_priv *priv;
 
 	priv = netdev_priv(si->ndev);
-
-	priv->eee.eee_active = false;
-	enetc_eee_mode_set(si->ndev, priv->eee.eee_active);
 
 	if (si->hw_features & ENETC_SI_F_QBU)
 		enetc_mm_link_state_update(priv, false);
@@ -1149,16 +1143,6 @@ static void enetc4_deinit_devlink(struct enetc_pf *pf)
 	enetc_devlink_params_unregister(devlink);
 }
 
-static void enetc4_pf_get_errata(struct enetc_pf *pf)
-{
-	struct enetc_hw *hw = &pf->si->hw;
-	u32 revision;
-
-	revision = enetc_global_rd(hw, ENETC_G_EIPBRR0) & IPBR0_IP_REV;
-	if (revision == ENETC_REV_4_1)
-		pf->si->errata |= ENETC_ERR_SG_DROP_CNT;
-}
-
 static int enetc4_pf_struct_init(struct enetc_si *si)
 {
 	struct enetc_pf *pf = enetc_si_priv(si);
@@ -1168,7 +1152,6 @@ static int enetc4_pf_struct_init(struct enetc_si *si)
 	pf->si = si;
 	pf->total_vfs = pci_sriov_get_totalvfs(si->pdev);
 
-	enetc4_pf_get_errata(pf);
 	enetc4_get_port_caps(pf);
 	enetc_pf_register_hw_ops(pf, &enetc4_pf_hw_ops);
 

@@ -1168,6 +1168,7 @@ dtb-$(CONFIG_ARCH_IMX8M) += \
 	imx8mp-dhcom-pdk3-overlay-rev100.dtbo \
 	imx8mp-ddr4-evk.dtb \
 	imx8mp-evk.dtb \
+	imx8mp-frdm.dtb \
 	imx8mp-icore-mx8mp-edimm2.2.dtb \
 	imx8mp-msc-sm2s.dtb \
 	imx8mp-phyboard-pollux-rdk.dtb \
@@ -1188,14 +1189,17 @@ dtb-$(CONFIG_ARCH_IMX9) += \
 	imx95-19x19-evk.dtb \
 	imx95-19x19-verdin.dtb \
 	imx91-11x11-evk.dtb \
+	imx91-11x11-frdm.dtb \
+	imx91-11x11-frdm-imx91s.dtb \
 	imx91-9x9-qsb.dtb \
 	imx91-11x11-evk-spinand.dtb \
 	imx91-11x11-evk-tianma-wvga-panel.dtb \
 	imx93-11x11-evk.dtb \
 	imx93-11x11-evk-pmic-pf0900.dtb \
+	imx93-11x11-frdm.dtb \
 	imx93-14x14-evk.dtb \
 	imx93-9x9-qsb.dtb \
-	imx93-9x9-qsb-tianma-wvga-panel.dtb \
+	imx93-9x9-qsb-ontat-wvga-panel.dtb \
 	imx93-var-som-symphony.dtb \
 	imx93-phyboard-segin.dtb
 

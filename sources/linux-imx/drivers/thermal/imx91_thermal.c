@@ -106,7 +106,6 @@ static int imx91_tmu_get_temp(struct thermal_zone_device *tz, int *temp)
 	struct imx91_tmu *tmu = sensor->priv;
 	u32 val;
 	int ret;
-	int16_t data;
 
 	ret = readl_relaxed_poll_timeout(tmu->base + STAT0, val,
 					 val & STAT0_DRDY0_IF_MASK, 1000,
@@ -114,8 +113,8 @@ static int imx91_tmu_get_temp(struct thermal_zone_device *tz, int *temp)
 	if (ret)
 		return -EAGAIN;
 
-	data = readw_relaxed(tmu->base + DATA0);
-	*temp = data * 1000 / 64;
+	val = readl_relaxed(tmu->base + DATA0) & 0xffffU;
+	*temp = (int)((int16_t)val * 1000LL / 64LL);
 	if (*temp < TMU_TEMP_LOW_LIMIT || *temp > TMU_TEMP_HIGH_LIMIT)
 		return -EAGAIN;
 
@@ -270,10 +269,11 @@ static int imx91_tmu_probe(struct platform_device *pdev)
 	/*
 	 * Set measure mode
 	 * 00b - Single oneshot measurement
+	 * 01b - Continuous measurement
 	 * 10b - Periodic oneshot measurement
 	 */
 	writel_relaxed(FIELD_PREP(CTRL1_MEAS_MODE_MASK, 0x3), tmu->base + CTRL1_CLR);
-	writel_relaxed(FIELD_PREP(CTRL1_MEAS_MODE_MASK, 0x2), tmu->base + CTRL1_SET);
+	writel_relaxed(FIELD_PREP(CTRL1_MEAS_MODE_MASK, 0x1), tmu->base + CTRL1_SET);
 
 	/*
 	 * Set Periodic Measurement Frequency to 25Hz:

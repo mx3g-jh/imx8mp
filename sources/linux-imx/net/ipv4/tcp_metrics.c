@@ -619,7 +619,6 @@ static const struct nla_policy tcp_metrics_nl_policy[TCP_METRICS_ATTR_MAX + 1] =
 	[TCP_METRICS_ATTR_ADDR_IPV4]	= { .type = NLA_U32, },
 	[TCP_METRICS_ATTR_ADDR_IPV6]	= { .type = NLA_BINARY,
 					    .len = sizeof(struct in6_addr), },
-	[TCP_METRICS_ATTR_SADDR_IPV4]	= { .type = NLA_U32, },
 	/* Following attributes are not received for GET/DEL,
 	 * we keep them for reference
 	 */
@@ -899,13 +898,11 @@ static void tcp_metrics_flush_all(struct net *net)
 	unsigned int row;
 
 	for (row = 0; row < max_rows; row++, hb++) {
-		struct tcp_metrics_block __rcu **pp = &hb->chain;
+		struct tcp_metrics_block __rcu **pp;
 		bool match;
 
-		if (!rcu_access_pointer(*pp))
-			continue;
-
 		spin_lock_bh(&tcp_metrics_lock);
+		pp = &hb->chain;
 		for (tm = deref_locked(*pp); tm; tm = deref_locked(*pp)) {
 			match = net ? net_eq(tm_net(tm), net) :
 				!refcount_read(&tm_net(tm)->ns.count);
@@ -917,7 +914,6 @@ static void tcp_metrics_flush_all(struct net *net)
 			}
 		}
 		spin_unlock_bh(&tcp_metrics_lock);
-		cond_resched();
 	}
 }
 

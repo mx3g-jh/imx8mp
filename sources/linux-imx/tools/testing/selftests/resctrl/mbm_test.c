@@ -59,7 +59,7 @@ static int check_results(size_t span)
 
 	fp = fopen(output, "r");
 	if (!fp) {
-		ksft_perror(output);
+		perror(output);
 
 		return errno;
 	}

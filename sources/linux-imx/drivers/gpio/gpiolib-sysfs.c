@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 
 #include <linux/bitops.h>
-#include <linux/cleanup.h>
 #include <linux/device.h>
 #include <linux/idr.h>
 #include <linux/init.h>
@@ -775,15 +774,15 @@ void gpiochip_sysfs_unregister(struct gpio_device *gdev)
 	struct gpio_desc *desc;
 	struct gpio_chip *chip = gdev->chip;
 
-	scoped_guard(mutex, &sysfs_lock) {
-		if (!gdev->mockdev)
-			return;
+	if (!gdev->mockdev)
+		return;
 
-		device_unregister(gdev->mockdev);
+	device_unregister(gdev->mockdev);
 
-		/* prevent further gpiod exports */
-		gdev->mockdev = NULL;
-	}
+	/* prevent further gpiod exports */
+	mutex_lock(&sysfs_lock);
+	gdev->mockdev = NULL;
+	mutex_unlock(&sysfs_lock);
 
 	/* unregister gpiod class devices owned by sysfs */
 	for_each_gpio_desc_with_flag(chip, desc, FLAG_SYSFS) {

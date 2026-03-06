@@ -12,18 +12,6 @@
 		ethernet2 = &enetc_port2;
 	};
 
-	chosen {
-		stdout-path = &lpuart1;
-		#address-cells = <2>;
-		#size-cells = <2>;
-		/* will be updated by U-boot when booting Xen */
-		module@0 {
-			bootargs = "earlycon=xen console=hvc0 loglevel=8 root=/dev/mmcblk1p2 rw rootwait";
-			compatible = "xen,linux-zimage", "xen,multiboot-module";
-			reg = <0x00000000 0x9e000000 0x00000000 0x2000000>;
-		};
-	};
-
 	dummy_reg: dummy_reg {
 		compatible = "regulator-fixed";
 		regulator-name = "dummy_reg";
@@ -45,7 +33,6 @@
 	/delete-node/ sound-wm8962;
 	/delete-node/ pca9632;
 	/delete-node/ i2c3_gpio_expander_20;
-	/delete-node/ pwm-fan;
 
 	sound-wm8904 {
 		compatible = "fsl,imx-audio-wm8904";
@@ -241,28 +228,6 @@
 
 &lpspi7 {
 	status = "disabled";
-};
-
-&lpuart5 {
-	bluetooth {
-		fw-init-baudrate = <115200>;
-	};
-};
-
-&thermal_zones {
-	a55 {
-		trips {
-			/delete-node/ trip2;
-			/delete-node/ trip3;
-			/delete-node/ trip4;
-		};
-
-		cooling-maps {
-			/delete-node/ map1;
-			/delete-node/ map2;
-			/delete-node/ map3;
-		};
-	};
 };
 
 &scmi_iomuxc {

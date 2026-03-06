@@ -7,10 +7,8 @@
 
 #include <linux/pm_runtime.h>
 #include <linux/delay.h>
-#include <linux/swiotlb.h>
 #include "wave6-vpu.h"
 #include "wave6-vpu-dbg.h"
-#include "wave6-trace.h"
 
 #define VPU_DEC_DEV_NAME "C&M Wave6 VPU decoder"
 #define VPU_DEC_DRV_NAME "wave6-dec"
@@ -88,7 +86,18 @@ static const struct vpu_format wave6_vpu_dec_fmt_list[2][6] = {
 };
 
 static int wave6_vpu_dec_seek_header(struct vpu_instance *inst);
-static int wave6_vpu_dec_prepare_fb(struct vpu_instance *inst);
+
+static enum wave_std wave6_to_vpu_codstd(unsigned int v4l2_pix_fmt)
+{
+	switch (v4l2_pix_fmt) {
+	case V4L2_PIX_FMT_H264:
+		return W_AVC_DEC;
+	case V4L2_PIX_FMT_HEVC:
+		return W_HEVC_DEC;
+	default:
+		return STD_UNKNOWN;
+	}
+}
 
 static const struct vpu_format *wave6_find_vpu_fmt(unsigned int v4l2_pix_fmt,
 						   enum vpu_fmt_type type)
@@ -175,9 +184,6 @@ static void wave6_handle_bitstream_buffer(struct vpu_instance *inst)
 		wave6_vpu_dec_set_rd_ptr(inst, rd_ptr, true);
 
 		src_size = vb2_get_plane_payload(&src_buf->vb2_buf, 0);
-		if (is_swiotlb_buffer(inst->dev->dev, rd_ptr))
-			dma_sync_single_for_device(inst->dev->dev, rd_ptr,
-						   src_size, DMA_BIDIRECTIONAL);
 	}
 
 	if (!src_size) {
@@ -186,8 +192,6 @@ static void wave6_handle_bitstream_buffer(struct vpu_instance *inst)
 		wave6_vpu_dec_get_bitstream_buffer(inst, &rd, &wr, NULL);
 		wave6_vpu_dec_set_rd_ptr(inst, wr, true);
 	}
-
-	trace_dec_pic(inst, src_buf ? src_buf->vb2_buf.index : -1, src_size);
 
 	ret = wave6_vpu_dec_update_bitstream_buffer(inst, src_size);
 	if (ret) {
@@ -207,7 +211,7 @@ static void wave6_update_pix_fmt_cap(struct v4l2_pix_format_mplane *pix_mp,
 	if (new_resolution)
 		pix_mp->plane_fmt[0].bytesperline = 0;
 
-	aligned_width = round_up(width, W6_DEC_ALIGNMENT);
+	aligned_width = round_up(width, 32);
 	wave6_update_pix_fmt(pix_mp, aligned_width, height);
 }
 
@@ -229,7 +233,7 @@ static int wave6_allocate_aux_buffer(struct vpu_instance *inst,
 
 	ret = wave6_vpu_dec_get_aux_buffer_size(inst, size_info, &size);
 	if (ret) {
-		dev_err(inst->dev->dev, "%s: Get size fail (type %d)\n", __func__, type);
+		dev_err(inst->dev->dev, "%s: Get size fail\n", __func__);
 		return ret;
 	}
 
@@ -238,7 +242,7 @@ static int wave6_allocate_aux_buffer(struct vpu_instance *inst,
 		inst->aux_vbuf[type][i].size = size;
 		ret = wave6_alloc_dma(inst->dev->dev, &inst->aux_vbuf[type][i]);
 		if (ret) {
-			dev_err(inst->dev->dev, "%s: Alloc fail (type %d)\n", __func__, type);
+			dev_err(inst->dev->dev, "%s: Alloc fail\n", __func__);
 			return ret;
 		}
 
@@ -253,7 +257,7 @@ static int wave6_allocate_aux_buffer(struct vpu_instance *inst,
 
 	ret = wave6_vpu_dec_register_aux_buffer(inst, buf_info);
 	if (ret) {
-		dev_err(inst->dev->dev, "%s: Register fail (type %d)\n", __func__, type);
+		dev_err(inst->dev->dev, "%s: Register fail\n", __func__);
 		return ret;
 	}
 
@@ -284,7 +288,7 @@ static void wave6_vpu_dec_handle_dst_buffer(struct vpu_instance *inst)
 		if (vpu_buf->consumed)
 			continue;
 
-		if (consumed_num >= WAVE6_MAX_FBS)
+		if (consumed_num >= W6_MAX_FB_NUM)
 			break;
 
 		if (inst->dst_fmt.num_planes == 1) {
@@ -407,33 +411,28 @@ static enum v4l2_ycbcr_encoding to_v4l2_ycbcr_encoding(u32 matrix_coeffs)
 static void wave6_update_color_info(struct vpu_instance *inst,
 				    struct dec_initial_info *initial_info)
 {
-	enum v4l2_quantization quantization = V4L2_QUANTIZATION_DEFAULT;
-	enum v4l2_colorspace colorspace = V4L2_COLORSPACE_DEFAULT;
-	enum v4l2_xfer_func xfer_func = V4L2_XFER_FUNC_DEFAULT;
-	enum v4l2_ycbcr_encoding ycbcr_enc = V4L2_YCBCR_ENC_DEFAULT;
 	struct wave_color_param *color = &initial_info->color;
 
-	if (color->video_signal_type_present_flag) {
-		quantization = to_v4l2_quantization(color->color_range);
-		if (color->color_description_present_flag) {
-			colorspace = to_v4l2_colorspace(color->color_primaries);
-			xfer_func = to_v4l2_xfer_func(color->transfer_characteristics);
-			ycbcr_enc = to_v4l2_ycbcr_encoding(color->matrix_coefficients);
-		}
-	}
+	if (!color->video_signal_type_present_flag)
+		goto set_default_all;
 
-	if (!inst->src_change) {
-		if (inst->colorspace != colorspace || inst->xfer_func != xfer_func ||
-		    inst->ycbcr_enc != ycbcr_enc || inst->quantization != quantization)
-			inst->src_change = V4L2_EVENT_SRC_CH_COLORSPACE;
-	}
+	inst->quantization = to_v4l2_quantization(color->color_range);
 
-	inst->quantization = quantization;
-	inst->colorspace = colorspace;
-	inst->xfer_func = xfer_func;
-	inst->ycbcr_enc = ycbcr_enc;
+	if (!color->color_description_present_flag)
+		goto set_default_color;
+
+	inst->colorspace = to_v4l2_colorspace(color->color_primaries);
+	inst->xfer_func = to_v4l2_xfer_func(color->transfer_characteristics);
+	inst->ycbcr_enc = to_v4l2_ycbcr_encoding(color->matrix_coefficients);
 
 	return;
+
+set_default_all:
+	inst->quantization = V4L2_QUANTIZATION_DEFAULT;
+set_default_color:
+	inst->colorspace = V4L2_COLORSPACE_DEFAULT;
+	inst->ycbcr_enc = V4L2_YCBCR_ENC_DEFAULT;
+	inst->xfer_func = V4L2_XFER_FUNC_DEFAULT;
 }
 
 static enum v4l2_mpeg_video_hevc_profile to_v4l2_hevc_profile(s32 profile)
@@ -471,10 +470,8 @@ static void wave6_update_v4l2_ctrls(struct vpu_instance *inst,
 	min_disp_cnt = info->frame_buf_delay + 1;
 	ctrl = v4l2_ctrl_find(&inst->v4l2_ctrl_hdl,
 			      V4L2_CID_MIN_BUFFERS_FOR_CAPTURE);
-	if (ctrl && v4l2_ctrl_g_ctrl(ctrl) < min_disp_cnt) {
-		inst->src_change = V4L2_EVENT_SRC_CH_RESOLUTION;
+	if (ctrl)
 		v4l2_ctrl_s_ctrl(ctrl, min_disp_cnt);
-	}
 
 	if (inst->src_fmt.pixelformat == V4L2_PIX_FMT_HEVC) {
 		ctrl = v4l2_ctrl_find(&inst->v4l2_ctrl_hdl,
@@ -568,7 +565,7 @@ static void wave6_handle_decoded_frame(struct vpu_instance *inst,
 		dst_vpu_buf->hw_time = wave6_cycle_to_ns(inst->dev, info->cycle.frame_cycle);
 	}
 
-	v4l2_m2m_src_buf_remove_by_buf(inst->v4l2_fh.m2m_ctx, src_buf);
+	src_buf = v4l2_m2m_src_buf_remove(inst->v4l2_fh.m2m_ctx);
 	if (state == VB2_BUF_STATE_ERROR) {
 		dprintk(inst->dev->dev, "[%d] error frame %d\n", inst->id, inst->sequence);
 		inst->error_buf_num++;
@@ -595,7 +592,7 @@ static void wave6_handle_skipped_frame(struct vpu_instance *inst)
 	inst->sequence++;
 	inst->processed_buf_num++;
 	inst->error_buf_num++;
-	v4l2_m2m_src_buf_remove_by_buf(inst->v4l2_fh.m2m_ctx, src_buf);
+	src_buf = v4l2_m2m_src_buf_remove(inst->v4l2_fh.m2m_ctx);
 	v4l2_m2m_buf_done(src_buf, VB2_BUF_STATE_ERROR);
 }
 
@@ -614,15 +611,6 @@ static void wave6_handle_display_frame(struct vpu_instance *inst,
 		dprintk(inst->dev->dev, "[%d] recycle display buffer\n", inst->id);
 		vpu_buf->consumed = false;
 		return;
-	}
-	for (int i = 0; i < inst->dst_fmt.num_planes; i++) {
-		dma_addr_t daddr = vb2_dma_contig_plane_dma_addr(&dst_buf->vb2_buf, i);
-
-		if (is_swiotlb_buffer(inst->dev->dev, daddr)) {
-			dma_sync_single_for_cpu(inst->dev->dev, daddr,
-						inst->dst_fmt.plane_fmt[i].sizeimage,
-						DMA_BIDIRECTIONAL);
-		}
 	}
 
 	if (inst->dst_fmt.num_planes == 1) {
@@ -699,7 +687,6 @@ static void wave6_handle_last_frame(struct vpu_instance *inst,
 		vb2_set_plane_payload(&dst_buf->vb2_buf, 2, 0);
 	}
 
-	dprintk(inst->dev->dev, "[%d] last buffer\n", inst->id);
 	dst_buf->flags |= V4L2_BUF_FLAG_LAST;
 	dst_buf->field = V4L2_FIELD_NONE;
 	v4l2_m2m_buf_done(dst_buf, VB2_BUF_STATE_DONE);
@@ -727,7 +714,7 @@ static void wave6_vpu_dec_retry_one_frame(struct vpu_instance *inst)
 static void wave6_vpu_dec_handle_source_change(struct vpu_instance *inst,
 					       struct dec_initial_info *info)
 {
-	struct v4l2_event vpu_event_src_ch = {
+	static const struct v4l2_event vpu_event_src_ch = {
 		.type = V4L2_EVENT_SOURCE_CHANGE,
 		.u.src_change.changes = V4L2_EVENT_SRC_CH_RESOLUTION,
 	};
@@ -737,31 +724,14 @@ static void wave6_vpu_dec_handle_source_change(struct vpu_instance *inst,
 		info->profile, info->min_frame_buffer_count, info->frame_buf_delay);
 
 	wave6_vpu_dec_retry_one_frame(inst);
+	wave6_vpu_dec_give_command(inst, DEC_RESET_FRAMEBUF_INFO, NULL);
 
 	wave6_vpu_set_instance_state(inst, VPU_INST_STATE_INIT_SEQ);
-
-	if (info->pic_width != inst->src_fmt.width || info->pic_height != inst->src_fmt.height)
-		inst->src_change = V4L2_EVENT_SRC_CH_RESOLUTION;
-
-	if (inst->crop.left != info->pic_crop_rect.left ||
-	    inst->crop.top != info->pic_crop_rect.top ||
-	    inst->crop.width != info->pic_crop_rect.right - inst->crop.left ||
-	    inst->crop.height != info->pic_crop_rect.bottom - inst->crop.top)
-		inst->src_change = V4L2_EVENT_SRC_CH_RESOLUTION;
 
 	inst->crop.left = info->pic_crop_rect.left;
 	inst->crop.top = info->pic_crop_rect.top;
 	inst->crop.width = info->pic_crop_rect.right - inst->crop.left;
 	inst->crop.height = info->pic_crop_rect.bottom - inst->crop.top;
-
-	if (inst->fb_num < info->min_frame_buffer_count) {
-		inst->src_change = V4L2_EVENT_SRC_CH_RESOLUTION;
-		inst->fb_num = info->min_frame_buffer_count;
-	}
-	if (inst->mv_num < info->req_mv_buffer_count) {
-		inst->src_change = V4L2_EVENT_SRC_CH_RESOLUTION;
-		inst->mv_num = info->req_mv_buffer_count;
-	}
 
 	wave6_update_v4l2_ctrls(inst, info);
 	wave6_update_color_info(inst, info);
@@ -769,16 +739,7 @@ static void wave6_vpu_dec_handle_source_change(struct vpu_instance *inst,
 	wave6_update_pix_fmt_cap(&inst->dst_fmt,
 				 info->pic_width, info->pic_height,
 				 true);
-
-	if (inst->src_change)
-		vpu_event_src_ch.u.src_change.changes = inst->src_change;
-
-	trace_source_change(inst, info);
-
-	if (inst->src_change != V4L2_EVENT_SRC_CH_COLORSPACE)
-		wave6_vpu_dec_give_command(inst, DEC_RESET_FRAMEBUF_INFO, NULL);
-
-	v4l2_event_queue_fh(&inst->v4l2_fh, (const struct v4l2_event *)&vpu_event_src_ch);
+	v4l2_event_queue_fh(&inst->v4l2_fh, &vpu_event_src_ch);
 }
 
 static void wave6_vpu_dec_handle_decoding_warn_error(struct vpu_instance *inst,
@@ -802,8 +763,6 @@ static void wave6_vpu_dec_finish_decode(struct vpu_instance *inst, int irq_statu
 	ret = wave6_vpu_dec_get_output_info(inst, &info);
 	if (ret)
 		goto finish_decode;
-
-	trace_dec_done(inst, &info);
 
 	dev_dbg(inst->dev->dev, "dec %d dis %d noti_flag %d stream_end %d\n",
 		info.frame_decoded_flag, info.frame_display_flag,
@@ -923,7 +882,7 @@ static int wave6_vpu_dec_try_fmt_cap(struct file *file, void *fh, struct v4l2_fo
 		pix_mp->num_planes = inst->dst_fmt.num_planes;
 	} else {
 		width = clamp(pix_mp->width,
-			      vpu_fmt->min_width, round_up(inst->src_fmt.width, W6_DEC_ALIGNMENT));
+			      vpu_fmt->min_width, round_up(inst->src_fmt.width, 32));
 		height = clamp(pix_mp->height,
 			       vpu_fmt->min_height, inst->src_fmt.height);
 		pix_mp->pixelformat = vpu_fmt->v4l2_pix_fmt;
@@ -1200,7 +1159,7 @@ static int wave6_vpu_dec_s_selection(struct file *file, void *fh, struct v4l2_se
 		s->flags |= V4L2_SEL_FLAG_LE;
 
 	scale_width = clamp(s->r.width, W6_MIN_DEC_PIC_WIDTH,
-			    round_up(inst->src_fmt.width, W6_DEC_ALIGNMENT));
+			    round_up(inst->src_fmt.width, 32));
 	scale_height = clamp(s->r.height, W6_MIN_DEC_PIC_HEIGHT,
 			     inst->src_fmt.height);
 	if (s->flags & V4L2_SEL_FLAG_GE) {
@@ -1241,45 +1200,10 @@ static int wave6_vpu_dec_s_selection(struct file *file, void *fh, struct v4l2_se
 	return 0;
 }
 
-static void wave6_vpu_reset_dst_buffers(struct vpu_instance *inst)
-{
-	struct v4l2_m2m_buffer *v4l2_m2m_buf;
-	struct vb2_v4l2_buffer *dst_buf;
-	struct vpu_buffer *vpu_buf;
-
-	v4l2_m2m_for_each_dst_buf(inst->v4l2_fh.m2m_ctx, v4l2_m2m_buf) {
-		dst_buf = &v4l2_m2m_buf->vb;
-		vpu_buf = wave6_to_vpu_buf(dst_buf);
-
-		vpu_buf->consumed = false;
-		vpu_buf->used = false;
-		vpu_buf->error = false;
-	}
-}
-
-static int wave6_vpu_dec_start_cmd(struct vpu_instance *inst)
-{
-	struct vb2_queue *q = v4l2_m2m_get_dst_vq(inst->v4l2_fh.m2m_ctx);
-	int ret = 0;
-
-	dprintk(inst->dev->dev, "[%d] start cmd\n", inst->id);
-
-	if (v4l2_m2m_has_stopped(inst->v4l2_fh.m2m_ctx)) {
-		v4l2_m2m_clear_state(inst->v4l2_fh.m2m_ctx);
-		wave6_vpu_dec_flush_instance(inst);
-		wave6_vpu_reset_dst_buffers(inst);
-	}
-	vb2_clear_last_buffer_dequeued(q);
-	if (inst->state == VPU_INST_STATE_INIT_SEQ)
-		ret = wave6_vpu_dec_prepare_fb(inst);
-
-	return ret;
-}
-
 static int wave6_vpu_dec_decoder_cmd(struct file *file, void *fh, struct v4l2_decoder_cmd *dc)
 {
 	struct vpu_instance *inst = wave6_to_vpu_inst(fh);
-	int ret = 0;
+	int ret;
 
 	dev_dbg(inst->dev->dev, "%s: cmd %d\n", __func__, dc->cmd);
 
@@ -1294,14 +1218,12 @@ static int wave6_vpu_dec_decoder_cmd(struct file *file, void *fh, struct v4l2_de
 		v4l2_m2m_try_schedule(inst->v4l2_fh.m2m_ctx);
 		break;
 	case V4L2_DEC_CMD_START:
-		ret = wave6_vpu_dec_start_cmd(inst);
-		v4l2_m2m_try_schedule(inst->v4l2_fh.m2m_ctx);
 		break;
 	default:
 		return -EINVAL;
 	}
 
-	return ret;
+	return 0;
 }
 
 static const struct v4l2_ioctl_ops wave6_vpu_dec_ioctl_ops = {
@@ -1341,8 +1263,6 @@ static const struct v4l2_ioctl_ops wave6_vpu_dec_ioctl_ops = {
 static int wave6_vpu_dec_s_ctrl(struct v4l2_ctrl *ctrl)
 {
 	struct vpu_instance *inst = wave6_ctrl_to_vpu_inst(ctrl);
-
-	trace_s_ctrl(inst, ctrl);
 
 	dev_dbg(inst->dev->dev, "%s: name %s value %d\n",
 		__func__, ctrl->name, ctrl->val);
@@ -1400,16 +1320,15 @@ static int wave6_vpu_dec_create_instance(struct vpu_instance *inst)
 
 	memset(&open_param, 0, sizeof(struct dec_open_param));
 
-	wave6_vpu_activate(inst->dev);
 	ret = pm_runtime_resume_and_get(inst->dev->dev);
 	if (ret) {
 		dev_err(inst->dev->dev, "runtime_resume failed %d\n", ret);
 		return ret;
 	}
 
-	wave6_vpu_wait_activated(inst->dev);
+	wave6_vpu_wait_active(inst);
 
-	inst->std = wave6_to_wave_std(inst->type, inst->src_fmt.pixelformat);
+	inst->std = wave6_to_vpu_codstd(inst->src_fmt.pixelformat);
 	if (inst->std == STD_UNKNOWN) {
 		dev_err(inst->dev->dev, "unsupported pixelformat: %.4s\n",
 			(char *)&inst->src_fmt.pixelformat);
@@ -1451,66 +1370,76 @@ static int wave6_vpu_dec_prepare_fb(struct vpu_instance *inst)
 	unsigned int mv_num = 0;
 	unsigned int fb_stride = 0;
 	unsigned int fb_height = 0;
+	struct dec_info *p_dec_info = &inst->codec_info->dec_info;
+	struct vpu_attr *attr = &inst->dev->attr;
 
-	fb_num = inst->fb_num;
-	mv_num = inst->mv_num;
-	fb_stride = ALIGN(inst->src_fmt.width, W6_DEC_ALIGNMENT);
-	fb_height = ALIGN(inst->src_fmt.height, W6_DEC_ALIGNMENT);
+	fb_num = p_dec_info->initial_info.min_frame_buffer_count;
+	mv_num = p_dec_info->initial_info.req_mv_buffer_count;
 
-	if (inst->src_change != V4L2_EVENT_SRC_CH_COLORSPACE) {
-		for (i = 0; i < fb_num; i++) {
-			struct frame_buffer *frame = &inst->frame_buf[i];
-			struct vpu_buf *vframe = &inst->frame_vbuf[i];
-			unsigned int l_size = fb_stride * fb_height;
-			unsigned int ch_size = ALIGN(fb_stride / 2, W6_DEC_ALIGNMENT) * fb_height;
+	fb_stride = ALIGN(inst->src_fmt.width, 32);
+	fb_height = ALIGN(inst->src_fmt.height, 32);
 
-			vframe->size = l_size + ch_size;
-			ret = wave6_alloc_dma(inst->dev->dev, vframe);
-			if (ret) {
-				dev_err(inst->dev->dev, "alloc FBC buffer fail : %zu\n",
-					vframe->size);
-				goto error;
-			}
+	for (i = 0; i < fb_num; i++) {
+		struct frame_buffer *frame = &inst->frame_buf[i];
+		struct vpu_buf *vframe = &inst->frame_vbuf[i];
+		unsigned int l_size = fb_stride * fb_height;
+		unsigned int ch_size = ALIGN(fb_stride / 2, 32) * fb_height;
 
-			frame->buf_y = vframe->daddr;
-			frame->buf_cb = vframe->daddr + l_size;
-			frame->buf_cr = (dma_addr_t)-1;
-			frame->width = inst->src_fmt.width;
-			frame->stride = fb_stride;
-			frame->height = fb_height;
-			frame->map_type = COMPRESSED_FRAME_MAP;
+		vframe->size = l_size + ch_size;
+		ret = wave6_alloc_dma(inst->dev->dev, vframe);
+		if (ret) {
+			dev_err(inst->dev->dev, "alloc FBC buffer fail : %zu\n",
+				vframe->size);
+			goto error;
 		}
 
-		ret = wave6_allocate_aux_buffer(inst, AUX_BUF_FBC_Y_TBL, fb_num);
-		if (ret)
-			goto error;
+		frame->buf_y = vframe->daddr;
+		frame->buf_cb = vframe->daddr + l_size;
+		frame->buf_cr = (dma_addr_t)-1;
+		frame->width = inst->src_fmt.width;
+		frame->stride = fb_stride;
+		frame->height = fb_height;
+		frame->map_type = COMPRESSED_FRAME_MAP;
+	}
 
-		ret = wave6_allocate_aux_buffer(inst, AUX_BUF_FBC_C_TBL, fb_num);
-		if (ret)
+	ret = wave6_allocate_aux_buffer(inst, AUX_BUF_FBC_Y_TBL, fb_num);
+	if (ret) {
+		dev_err(inst->dev->dev, "alloc FBC_Y_TBL buffer fail\n");
+		goto error;
+	}
+	ret = wave6_allocate_aux_buffer(inst, AUX_BUF_FBC_C_TBL, fb_num);
+	if (ret) {
+		dev_err(inst->dev->dev, "alloc FBC_C_TBL buffer fail\n");
+		goto error;
+	}
+	ret = wave6_allocate_aux_buffer(inst, AUX_BUF_MV_COL, mv_num);
+	if (ret) {
+		dev_err(inst->dev->dev, "alloc MV_COL buffer fail\n");
+		goto error;
+	}
+	if (inst->std == W_AV1_DEC) {
+		ret = wave6_allocate_aux_buffer(inst, AUX_BUF_DEF_CDF, 1);
+		if (ret) {
+			dev_err(inst->dev->dev, "alloc DEF_CDF buffer fail\n");
 			goto error;
-
-		ret = wave6_allocate_aux_buffer(inst, AUX_BUF_MV_COL, mv_num);
-		if (ret)
-			goto error;
-
-		if (inst->std == W_AV1_DEC) {
-			ret = wave6_allocate_aux_buffer(inst, AUX_BUF_DEF_CDF, 1);
-			if (ret)
-				goto error;
 		}
-		if (inst->std == W_VP9_DEC) {
-			ret = wave6_allocate_aux_buffer(inst, AUX_BUF_SEG_MAP, 1);
-			if (ret)
-				goto error;
+	}
+	if (inst->std == W_VP9_DEC) {
+		ret = wave6_allocate_aux_buffer(inst, AUX_BUF_SEG_MAP, 1);
+		if (ret) {
+			dev_err(inst->dev->dev, "alloc SEG_MAP buffer fail\n");
+			goto error;
 		}
-		if ((inst->std == W_AV1_DEC || inst->std == W_VP9_DEC)) {
-			ret = wave6_allocate_aux_buffer(inst, AUX_BUF_PRE_ENT, 1);
-			if (ret)
-				goto error;
+	}
+	if ((inst->std == W_AV1_DEC || inst->std == W_VP9_DEC) &&
+	    attr->support_command_queue) {
+		ret = wave6_allocate_aux_buffer(inst, AUX_BUF_PRE_ENT, 1);
+		if (ret) {
+			dev_err(inst->dev->dev, "alloc PRE_ENT buffer fail\n");
+			goto error;
 		}
 	}
 
-	inst->src_change = 0;
 	ret = wave6_vpu_dec_register_frame_buffer_ex(inst, fb_num, fb_stride,
 						     fb_height,
 						     COMPRESSED_FRAME_MAP);
@@ -1594,15 +1523,14 @@ static int wave6_vpu_dec_seek_header(struct vpu_instance *inst)
 		return ret;
 	}
 
-	if (wave6_vpu_wait_interrupt(inst, W6_VPU_TIMEOUT) < 0)
+	if (wave6_vpu_wait_interrupt(inst, VPU_DEC_TIMEOUT) < 0)
 		dev_err(inst->dev->dev, "failed to call vpu_wait_interrupt()\n");
 
 	ret = wave6_vpu_dec_complete_seq_init(inst, &initial_info);
 	if (ret) {
 		dev_err(inst->dev->dev, "vpu_dec_complete_seq_init: %d, reason : 0x%x\n",
 			ret, initial_info.err_reason);
-		if ((initial_info.err_reason & WAVE6_SYSERR_NOT_SUPPORT) ||
-		    (initial_info.err_reason & WAVE6_SYSERR_NOT_SUPPORT_PROFILE)) {
+		if (initial_info.err_reason & WAVE6_SYSERR_NOT_SUPPORT) {
 			ret = -EINVAL;
 		} else if ((initial_info.err_reason & HEVC_ETCERR_INIT_SEQ_SPS_NOT_FOUND) ||
 			   (initial_info.err_reason & AVC_ETCERR_INIT_SEQ_SPS_NOT_FOUND)) {
@@ -1610,8 +1538,6 @@ static int wave6_vpu_dec_seek_header(struct vpu_instance *inst)
 			ret = 0;
 		}
 	} else {
-		/* The initial source change must be a resolution change */
-		inst->src_change = V4L2_EVENT_SRC_CH_RESOLUTION;
 		wave6_vpu_dec_handle_source_change(inst, &initial_info);
 		inst->v4l2_fh.m2m_ctx->ignore_cap_streaming = false;
 		v4l2_m2m_set_dst_buffered(inst->v4l2_fh.m2m_ctx, false);
@@ -1676,8 +1602,6 @@ static int wave6_vpu_dec_start_streaming(struct vb2_queue *q, unsigned int count
 	struct v4l2_pix_format_mplane *fmt;
 	int ret = 0;
 
-	trace_start_streaming(inst, q->type);
-
 	wave6_vpu_pause(inst->dev->dev, 0);
 
 	if (V4L2_TYPE_IS_OUTPUT(q->type)) {
@@ -1720,11 +1644,9 @@ static void wave6_vpu_dec_stop_streaming(struct vb2_queue *q)
 	struct vpu_instance *inst = vb2_get_drv_priv(q);
 	struct v4l2_m2m_ctx *m2m_ctx = inst->v4l2_fh.m2m_ctx;
 
-	trace_stop_streaming(inst, q->type);
-
-	dprintk(inst->dev->dev, "[%d] %s, input %d, decode %d error %d\n",
+	dprintk(inst->dev->dev, "[%d] %s, input %d, decode %d, error %d\n",
 		inst->id, V4L2_TYPE_IS_OUTPUT(q->type) ? "output" : "capture",
-		inst->queued_src_buf_num, inst->processed_buf_num, inst->error_buf_num);
+		inst->queued_src_buf_num, inst->sequence, inst->error_buf_num);
 
 	if (inst->state == VPU_INST_STATE_NONE)
 		goto exit;
@@ -1769,12 +1691,8 @@ static int wave6_vpu_dec_buf_init(struct vb2_buffer *vb)
 	if (initial_info.chroma_format_idc != YUV400)
 		return 0;
 
-	for (i = 0; i < inst->dst_fmt.num_planes; i++) {
-		void *vaddr = vb2_plane_vaddr(vb, i);
-
-		if (vaddr)
-			memset(vaddr, 0x80, vb2_plane_size(vb, i));
-	}
+	for (i = 0; i < inst->dst_fmt.num_planes; i++)
+		memset(vb2_plane_vaddr(vb, i), 0x80, vb2_plane_size(vb, i));
 
 	return 0;
 }
@@ -1972,11 +1890,12 @@ int wave6_vpu_dec_register_device(struct vpu_device *dev)
 	vdev_dec->vfl_dir = VFL_DIR_M2M;
 	vdev_dec->device_caps = V4L2_CAP_VIDEO_M2M_MPLANE | V4L2_CAP_STREAMING;
 	vdev_dec->lock = &dev->dev_lock;
-	video_set_drvdata(vdev_dec, dev);
 
 	ret = video_register_device(vdev_dec, VFL_TYPE_VIDEO, -1);
 	if (ret)
 		return ret;
+
+	video_set_drvdata(vdev_dec, dev);
 
 	return 0;
 }

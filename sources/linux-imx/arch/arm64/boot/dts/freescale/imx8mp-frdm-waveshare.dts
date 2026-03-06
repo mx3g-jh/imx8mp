@@ -1,0 +1,38 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Copyright 2025 NXP
+ */
+
+#include "imx8mp-frdm.dts"
+
+&mipi_dsi {
+	status = "okay";
+
+	port@1 {
+		dsim_to_waveshare: endpoint {
+			remote-endpoint = <&waveshare_from_dsim>;
+			attach-bridge;
+		};
+	};
+};
+
+&i2c3 {
+	waveshare: panel@45 {
+		compatible = "waveshare,7.0inch-c-panel";
+		reg = <0x45>;
+		status = "okay";
+
+		port {
+			waveshare_from_dsim: endpoint{
+				remote-endpoint = <&dsim_to_waveshare>;
+			};
+		};
+	};
+
+	touchscreen@14{
+		reg = <0x14>;
+		compatible = "goodix,gt911";
+		touchscreen-size-x = <1024>;
+		touchscreen-size-y = <600>;
+	};
+};

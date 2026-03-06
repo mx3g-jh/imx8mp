@@ -19,7 +19,7 @@
 
 #include "smc_clc.h"
 
-#define SMC_MAX_FBACK_RSN_CNT 36
+#define SMC_MAX_FBACK_RSN_CNT 30
 
 enum {
 	SMC_BUF_8K,

@@ -535,9 +535,8 @@ static bool shmem_confirm_swap(struct address_space *mapping,
 
 static int shmem_huge __read_mostly = SHMEM_HUGE_NEVER;
 
-static bool __shmem_is_huge(struct inode *inode, pgoff_t index,
-			    bool shmem_huge_force, struct mm_struct *mm,
-			    unsigned long vm_flags)
+bool shmem_is_huge(struct inode *inode, pgoff_t index, bool shmem_huge_force,
+		   struct mm_struct *mm, unsigned long vm_flags)
 {
 	loff_t i_size;
 
@@ -566,16 +565,6 @@ static bool __shmem_is_huge(struct inode *inode, pgoff_t index,
 	default:
 		return false;
 	}
-}
-
-bool shmem_is_huge(struct inode *inode, pgoff_t index,
-		   bool shmem_huge_force, struct mm_struct *mm,
-		   unsigned long vm_flags)
-{
-	if (HPAGE_PMD_ORDER > MAX_PAGECACHE_ORDER)
-		return false;
-
-	return __shmem_is_huge(inode, index, shmem_huge_force, mm, vm_flags);
 }
 
 #if defined(CONFIG_SYSFS)

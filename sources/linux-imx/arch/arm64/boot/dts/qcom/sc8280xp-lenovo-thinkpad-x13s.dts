@@ -619,16 +619,15 @@
 
 	status = "okay";
 
+	/* FIXME: verify */
 	touchscreen@10 {
-		compatible = "elan,ekth5015m", "elan,ekth6915";
+		compatible = "hid-over-i2c";
 		reg = <0x10>;
 
+		hid-descr-addr = <0x1>;
 		interrupts-extended = <&tlmm 175 IRQ_TYPE_LEVEL_LOW>;
-		reset-gpios = <&tlmm 99 (GPIO_ACTIVE_LOW | GPIO_OPEN_DRAIN)>;
-		no-reset-on-power-off;
-
-		vcc33-supply = <&vreg_misc_3p3>;
-		vccio-supply = <&vreg_misc_3p3>;
+		vdd-supply = <&vreg_misc_3p3>;
+		vddl-supply = <&vreg_s10b>;
 
 		pinctrl-names = "default";
 		pinctrl-0 = <&ts0_default>;
@@ -1452,8 +1451,8 @@
 		reset-n-pins {
 			pins = "gpio99";
 			function = "gpio";
-			drive-strength = <2>;
-			bias-disable;
+			output-high;
+			drive-strength = <16>;
 		};
 	};
 

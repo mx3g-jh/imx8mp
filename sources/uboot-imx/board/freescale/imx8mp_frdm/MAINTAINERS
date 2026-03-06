@@ -1,0 +1,5 @@
+i.MX8MP FRDM BOARD
+S:	Maintained
+F:	board/freescale/imx8mp_frdm/
+F:	include/configs/imx8mp_frdm.h
+F:	configs/imx8mp_frdm_defconfig

@@ -368,7 +368,7 @@ static int cvt_ump_midi1_to_midi2(struct snd_seq_client *dest,
 	struct snd_seq_ump_event ev_cvt;
 	const union snd_ump_midi1_msg *midi1 = (const union snd_ump_midi1_msg *)event->ump;
 	union snd_ump_midi2_msg *midi2 = (union snd_ump_midi2_msg *)ev_cvt.ump;
-	struct ump_cvt_to_ump_bank *cc;
+	struct snd_seq_ump_midi2_bank *cc;
 
 	ev_cvt = *event;
 	memset(&ev_cvt.ump, 0, sizeof(ev_cvt.ump));
@@ -789,45 +789,26 @@ static int paf_ev_to_ump_midi2(const struct snd_seq_event *event,
 	return 1;
 }
 
-static void reset_rpn(struct ump_cvt_to_ump_bank *cc)
-{
-	cc->rpn_set = 0;
-	cc->nrpn_set = 0;
-	cc->cc_rpn_msb = cc->cc_rpn_lsb = 0;
-	cc->cc_data_msb = cc->cc_data_lsb = 0;
-	cc->cc_data_msb_set = cc->cc_data_lsb_set = 0;
-}
-
 /* set up the MIDI2 RPN/NRPN packet data from the parsed info */
-static int fill_rpn(struct ump_cvt_to_ump_bank *cc,
-		    union snd_ump_midi2_msg *data,
-		    unsigned char channel,
-		    bool flush)
+static void fill_rpn(struct snd_seq_ump_midi2_bank *cc,
+		     union snd_ump_midi2_msg *data)
 {
-	if (!(cc->cc_data_lsb_set || cc->cc_data_msb_set))
-		return 0; // skip
-	/* when not flushing, wait for complete data set */
-	if (!flush && (!cc->cc_data_lsb_set || !cc->cc_data_msb_set))
-		return 0; // skip
-
 	if (cc->rpn_set) {
 		data->rpn.status = UMP_MSG_STATUS_RPN;
 		data->rpn.bank = cc->cc_rpn_msb;
 		data->rpn.index = cc->cc_rpn_lsb;
-	} else if (cc->nrpn_set) {
+		cc->rpn_set = 0;
+		cc->cc_rpn_msb = cc->cc_rpn_lsb = 0;
+	} else {
 		data->rpn.status = UMP_MSG_STATUS_NRPN;
 		data->rpn.bank = cc->cc_nrpn_msb;
 		data->rpn.index = cc->cc_nrpn_lsb;
-	} else {
-		return 0; // skip
+		cc->nrpn_set = 0;
+		cc->cc_nrpn_msb = cc->cc_nrpn_lsb = 0;
 	}
-
 	data->rpn.data = upscale_14_to_32bit((cc->cc_data_msb << 7) |
 					     cc->cc_data_lsb);
-	data->rpn.channel = channel;
-
-	reset_rpn(cc);
-	return 1;
+	cc->cc_data_msb = cc->cc_data_lsb = 0;
 }
 
 /* convert CC event to MIDI 2.0 UMP */
@@ -839,39 +820,29 @@ static int cc_ev_to_ump_midi2(const struct snd_seq_event *event,
 	unsigned char channel = event->data.control.channel & 0x0f;
 	unsigned char index = event->data.control.param & 0x7f;
 	unsigned char val = event->data.control.value & 0x7f;
-	struct ump_cvt_to_ump_bank *cc = &dest_port->midi2_bank[channel];
-	int ret;
+	struct snd_seq_ump_midi2_bank *cc = &dest_port->midi2_bank[channel];
 
 	/* process special CC's (bank/rpn/nrpn) */
 	switch (index) {
 	case UMP_CC_RPN_MSB:
-		ret = fill_rpn(cc, data, channel, true);
 		cc->rpn_set = 1;
 		cc->cc_rpn_msb = val;
-		if (cc->cc_rpn_msb == 0x7f && cc->cc_rpn_lsb == 0x7f)
-			reset_rpn(cc);
-		return ret;
+		return 0; // skip
 	case UMP_CC_RPN_LSB:
-		ret = fill_rpn(cc, data, channel, true);
 		cc->rpn_set = 1;
 		cc->cc_rpn_lsb = val;
-		if (cc->cc_rpn_msb == 0x7f && cc->cc_rpn_lsb == 0x7f)
-			reset_rpn(cc);
-		return ret;
+		return 0; // skip
 	case UMP_CC_NRPN_MSB:
-		ret = fill_rpn(cc, data, channel, true);
 		cc->nrpn_set = 1;
 		cc->cc_nrpn_msb = val;
-		return ret;
+		return 0; // skip
 	case UMP_CC_NRPN_LSB:
-		ret = fill_rpn(cc, data, channel, true);
 		cc->nrpn_set = 1;
 		cc->cc_nrpn_lsb = val;
-		return ret;
+		return 0; // skip
 	case UMP_CC_DATA:
-		cc->cc_data_msb_set = 1;
 		cc->cc_data_msb = val;
-		return fill_rpn(cc, data, channel, false);
+		return 0; // skip
 	case UMP_CC_BANK_SELECT:
 		cc->bank_set = 1;
 		cc->cc_bank_msb = val;
@@ -881,9 +852,11 @@ static int cc_ev_to_ump_midi2(const struct snd_seq_event *event,
 		cc->cc_bank_lsb = val;
 		return 0; // skip
 	case UMP_CC_DATA_LSB:
-		cc->cc_data_lsb_set = 1;
 		cc->cc_data_lsb = val;
-		return fill_rpn(cc, data, channel, false);
+		if (!(cc->rpn_set || cc->nrpn_set))
+			return 0; // skip
+		fill_rpn(cc, data);
+		return 1;
 	}
 
 	data->cc.status = status;
@@ -912,7 +885,7 @@ static int pgm_ev_to_ump_midi2(const struct snd_seq_event *event,
 			       unsigned char status)
 {
 	unsigned char channel = event->data.control.channel & 0x0f;
-	struct ump_cvt_to_ump_bank *cc = &dest_port->midi2_bank[channel];
+	struct snd_seq_ump_midi2_bank *cc = &dest_port->midi2_bank[channel];
 
 	data->pg.status = status;
 	data->pg.channel = channel;
@@ -949,9 +922,8 @@ static int ctrl14_ev_to_ump_midi2(const struct snd_seq_event *event,
 {
 	unsigned char channel = event->data.control.channel & 0x0f;
 	unsigned char index = event->data.control.param & 0x7f;
-	struct ump_cvt_to_ump_bank *cc = &dest_port->midi2_bank[channel];
+	struct snd_seq_ump_midi2_bank *cc = &dest_port->midi2_bank[channel];
 	unsigned char msb, lsb;
-	int ret;
 
 	msb = (event->data.control.value >> 7) & 0x7f;
 	lsb = event->data.control.value & 0x7f;
@@ -965,27 +937,28 @@ static int ctrl14_ev_to_ump_midi2(const struct snd_seq_event *event,
 		cc->cc_bank_lsb = lsb;
 		return 0; // skip
 	case UMP_CC_RPN_MSB:
-	case UMP_CC_RPN_LSB:
-		ret = fill_rpn(cc, data, channel, true);
 		cc->cc_rpn_msb = msb;
-		cc->cc_rpn_lsb = lsb;
+		fallthrough;
+	case UMP_CC_RPN_LSB:
 		cc->rpn_set = 1;
-		if (cc->cc_rpn_msb == 0x7f && cc->cc_rpn_lsb == 0x7f)
-			reset_rpn(cc);
-		return ret;
+		cc->cc_rpn_lsb = lsb;
+		return 0; // skip
 	case UMP_CC_NRPN_MSB:
-	case UMP_CC_NRPN_LSB:
-		ret = fill_rpn(cc, data, channel, true);
 		cc->cc_nrpn_msb = msb;
+		fallthrough;
+	case UMP_CC_NRPN_LSB:
 		cc->nrpn_set = 1;
 		cc->cc_nrpn_lsb = lsb;
-		return ret;
+		return 0; // skip
 	case UMP_CC_DATA:
-	case UMP_CC_DATA_LSB:
-		cc->cc_data_msb_set = cc->cc_data_lsb_set = 1;
 		cc->cc_data_msb = msb;
+		fallthrough;
+	case UMP_CC_DATA_LSB:
 		cc->cc_data_lsb = lsb;
-		return fill_rpn(cc, data, channel, false);
+		if (!(cc->rpn_set || cc->nrpn_set))
+			return 0; // skip
+		fill_rpn(cc, data);
+		return 1;
 	}
 
 	data->cc.status = UMP_MSG_STATUS_CC;
@@ -1045,7 +1018,7 @@ static int system_2p_ev_to_ump_midi2(const struct snd_seq_event *event,
 				     union snd_ump_midi2_msg *data,
 				     unsigned char status)
 {
-	return system_2p_ev_to_ump_midi1(event, dest_port,
+	return system_1p_ev_to_ump_midi1(event, dest_port,
 					 (union snd_ump_midi1_msg *)data,
 					 status);
 }
@@ -1217,53 +1190,44 @@ static int cvt_sysex_to_ump(struct snd_seq_client *dest,
 {
 	struct snd_seq_ump_event ev_cvt;
 	unsigned char status;
-	u8 buf[8], *xbuf;
+	u8 buf[6], *xbuf;
 	int offset = 0;
 	int len, err;
-	bool finished = false;
 
 	if (!snd_seq_ev_is_variable(event))
 		return 0;
 
 	setup_ump_event(&ev_cvt, event);
-	while (!finished) {
+	for (;;) {
 		len = snd_seq_expand_var_event_at(event, sizeof(buf), buf, offset);
 		if (len <= 0)
 			break;
-		if (WARN_ON(len > sizeof(buf)))
+		if (WARN_ON(len > 6))
 			break;
-
+		offset += len;
 		xbuf = buf;
-		status = UMP_SYSEX_STATUS_CONTINUE;
-		/* truncate the sysex start-marker */
 		if (*xbuf == UMP_MIDI1_MSG_SYSEX_START) {
 			status = UMP_SYSEX_STATUS_START;
-			len--;
-			offset++;
 			xbuf++;
-		}
-
-		/* if the last of this packet or the 1st byte of the next packet
-		 * is the end-marker, finish the transfer with this packet
-		 */
-		if (len > 0 && len < 8 &&
-		    xbuf[len - 1] == UMP_MIDI1_MSG_SYSEX_END) {
-			if (status == UMP_SYSEX_STATUS_START)
-				status = UMP_SYSEX_STATUS_SINGLE;
-			else
-				status = UMP_SYSEX_STATUS_END;
 			len--;
-			finished = true;
+			if (len > 0 && xbuf[len - 1] == UMP_MIDI1_MSG_SYSEX_END) {
+				status = UMP_SYSEX_STATUS_SINGLE;
+				len--;
+			}
+		} else {
+			if (xbuf[len - 1] == UMP_MIDI1_MSG_SYSEX_END) {
+				status = UMP_SYSEX_STATUS_END;
+				len--;
+			} else {
+				status = UMP_SYSEX_STATUS_CONTINUE;
+			}
 		}
-
-		len = min(len, 6);
 		fill_sysex7_ump(dest_port, ev_cvt.ump, status, xbuf, len);
 		err = __snd_seq_deliver_single_event(dest, dest_port,
 						     (struct snd_seq_event *)&ev_cvt,
 						     atomic, hop);
 		if (err < 0)
 			return err;
-		offset += len;
 	}
 	return 0;
 }

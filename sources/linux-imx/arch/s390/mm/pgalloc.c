@@ -53,8 +53,6 @@ unsigned long *crst_table_alloc(struct mm_struct *mm)
 
 void crst_table_free(struct mm_struct *mm, unsigned long *table)
 {
-	if (!table)
-		return;
 	pagetable_free(virt_to_ptdesc(table));
 }
 
@@ -502,8 +500,6 @@ static unsigned long *base_crst_alloc(unsigned long val)
 
 static void base_crst_free(unsigned long *table)
 {
-	if (!table)
-		return;
 	pagetable_free(virt_to_ptdesc(table));
 }
 

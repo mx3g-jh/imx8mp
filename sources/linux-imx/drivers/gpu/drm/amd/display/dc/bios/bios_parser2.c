@@ -2935,11 +2935,8 @@ static enum bp_result construct_integrated_info(
 	struct atom_common_table_header *header;
 	struct atom_data_revision revision;
 
-	int32_t i;
-	int32_t j;
-
-	if (!info)
-		return result;
+	uint32_t i;
+	uint32_t j;
 
 	if (info && DATA_TABLES(integratedsysteminfo)) {
 		header = GET_IMAGE(struct atom_common_table_header,

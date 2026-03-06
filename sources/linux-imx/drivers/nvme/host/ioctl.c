@@ -921,15 +921,15 @@ static int nvme_dev_user_cmd(struct nvme_ctrl *ctrl, void __user *argp,
 		bool open_for_write)
 {
 	struct nvme_ns *ns;
-	int ret, srcu_idx;
+	int ret;
 
-	srcu_idx = srcu_read_lock(&ctrl->srcu);
+	down_read(&ctrl->namespaces_rwsem);
 	if (list_empty(&ctrl->namespaces)) {
 		ret = -ENOTTY;
 		goto out_unlock;
 	}
 
-	ns = list_first_or_null_rcu(&ctrl->namespaces, struct nvme_ns, list);
+	ns = list_first_entry(&ctrl->namespaces, struct nvme_ns, list);
 	if (ns != list_last_entry(&ctrl->namespaces, struct nvme_ns, list)) {
 		dev_warn(ctrl->device,
 			"NVME_IOCTL_IO_CMD not supported when multiple namespaces present!\n");
@@ -939,18 +939,15 @@ static int nvme_dev_user_cmd(struct nvme_ctrl *ctrl, void __user *argp,
 
 	dev_warn(ctrl->device,
 		"using deprecated NVME_IOCTL_IO_CMD ioctl on the char device!\n");
-	if (!nvme_get_ns(ns)) {
-		ret = -ENXIO;
-		goto out_unlock;
-	}
-	srcu_read_unlock(&ctrl->srcu, srcu_idx);
+	kref_get(&ns->kref);
+	up_read(&ctrl->namespaces_rwsem);
 
 	ret = nvme_user_cmd(ctrl, ns, argp, 0, open_for_write);
 	nvme_put_ns(ns);
 	return ret;
 
 out_unlock:
-	srcu_read_unlock(&ctrl->srcu, srcu_idx);
+	up_read(&ctrl->namespaces_rwsem);
 	return ret;
 }
 

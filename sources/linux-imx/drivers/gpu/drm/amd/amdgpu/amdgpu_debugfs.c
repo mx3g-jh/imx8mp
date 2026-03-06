@@ -2052,13 +2052,12 @@ static ssize_t amdgpu_reset_dump_register_list_write(struct file *f,
 	struct amdgpu_device *adev = (struct amdgpu_device *)file_inode(f)->i_private;
 	char reg_offset[11];
 	uint32_t *new = NULL, *tmp = NULL;
-	unsigned int len = 0;
-	int ret, i = 0;
+	int ret, i = 0, len = 0;
 
 	do {
 		memset(reg_offset, 0, 11);
 		if (copy_from_user(reg_offset, buf + len,
-					min(10, (size-len)))) {
+					min(10, ((int)size-len)))) {
 			ret = -EFAULT;
 			goto error_free;
 		}

@@ -97,8 +97,6 @@ struct mana_txq {
 
 	atomic_t pending_sends;
 
-	bool napi_initialized;
-
 	struct mana_stats_tx stats;
 };
 
@@ -276,7 +274,6 @@ struct mana_cq {
 	/* NAPI data */
 	struct napi_struct napi;
 	int work_done;
-	int work_done_since_doorbell;
 	int budget;
 };
 

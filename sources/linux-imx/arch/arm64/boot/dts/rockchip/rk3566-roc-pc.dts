@@ -268,7 +268,7 @@
 		vcc9-supply = <&vcc3v3_sys>;
 
 		codec {
-			rockchip,mic-in-differential;
+			mic-in-differential;
 		};
 
 		regulators {

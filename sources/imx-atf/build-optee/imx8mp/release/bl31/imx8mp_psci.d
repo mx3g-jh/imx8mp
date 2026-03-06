@@ -1,4 +1,4 @@
-/home/mx3g/linux/mpu/nxp/frdm-imx8mp/tmp/work/imx8mpfrdm-poky-linux/imx-atf/2.10+git/git/build-optee/imx8mp/release/bl31/imx8mp_psci.o: \
+/home/mx3g/linux/mpu/manual-build/sources/imx-atf/build-optee/imx8mp/release/bl31/imx8mp_psci.o: \
  plat/imx/imx8m/imx8mp/imx8mp_psci.c include/lib/libc/stdbool.h \
  include/arch/aarch64/arch.h include/lib/utils_def.h \
  include/export/lib/utils_def_exp.h include/arch/aarch64/arch_helpers.h \
