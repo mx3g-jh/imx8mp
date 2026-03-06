@@ -1,0 +1,101 @@
+OPTIONS:
+
+	-soc [soc]
+		Specifies the SOC to build the image for.
+		This option is mandatory.
+
+	-rev [revision]
+		Specifies the SOC's revision to build the image for.
+		Valid values for revision are A0 and B0.
+		For now, only socs QX and QM have B0 revisions.
+		When not specified, default revision is A0.
+
+	-commit
+		Prints the commit used to build the mkimage.
+
+	-dev [device] [page_size]
+		Specifies the boot device.
+		The valid device values are: flexspi, sd and nand.
+		The page size argument is available only for B0 revisions when device is 'nand'.
+		The valid page size values are: 4K, 8K or 16K.
+
+	-append [filename]
+		Specifies the container blob file to be appended as is.
+
+	-out [filename]
+		Specifies the output file for the generated and appened containers.
+
+	-c, --container
+		Create new container to be appended.
+
+	-flags [value]
+		Specifies flags for the new container.
+		The value needs to be a 32bit value in hex.
+
+	-msel [mode]
+		Specifies the mode select value. Passed to boot FW (eg. SM).
+
+	-fuse_version [value]
+		Specifies fuse version field for the new container.
+
+	-sw_version [value]
+		Specifies SW version field for the new container.
+
+	-dcd [filename]
+		Specifies the DCD image to be appended to the new container.
+		Not applicable for socs QX and QM revision B0.
+
+	-dummy [address]
+		Specifies address used to store V2X firmware for non-flexspi booting.
+		If the address is not specified in non-flexspi booting, ROM won't load
+		V2X firwmware.
+		When setting this address to DDR, must ensure DDR is initialized by ROM.
+
+	-scfw [filename]
+		Specifies the SCFW image to be appended to the new container.
+
+	-scd [filename]
+		Specifies the SCD image to be appended to the new container.
+		Applicable only for non B0 revisions.
+
+	-seco [filename]
+		Specifies the SECO container to be appended to the final image.
+
+	-partition [partition index]
+		Specifies the partition index for boot core.
+		Default AP is 1 and M4 is 0 for a shared partition .
+
+	-csf [filename]
+		Specifies the CSF image to be appended to the new container.
+		Applicable only for non B0 revisions.
+
+	-ap [filename] [core] [address] (mu0|mu3) (pt[1-9])
+		Specifies the AP image to be appended to the new container.
+		Valid core values for this image are 'a35', 'a53' and 'a72'.
+		The address represents the start address and needs to be a 32bit value in hex.
+		optional: specify MU ID and partition ID, default values are mu0 and pt1.
+		Note: pt2 is an illegal value, it is reserved for system.
+
+	-images_hash [sha256|sha384|sha512]
+		Specifies the image hash type used in the new container.
+
+	-msg_blk [filename] [fuse|field|debug|patch|zero|degrade] [address]
+		Specifies a special A core data image used to pass a message block to SCFW
+		for debug, secure fuse programming, field return, patch, FIPS key zeroization,
+		and FIPS cluster degrade.
+
+	-m4 [filename] [core] [address]
+		Specifies the M4 image to be appended to the new container.
+		Valid core values for this image are 0 and 1.
+		The address represents the start address and needs to be a 32bit value in hex.
+
+	-data [filename] [core] [address]
+		Specifies a data image to be appended to the new container, usually a rootfs image or a kernel image.
+		The core can be 'a35', 'a53', 'a72', 'm4', 'm4_1'.
+		The address represents the load address and needs to be a 32bit value in hex.
+
+	-fileoff [offset]
+		Specifies a position to set the file offset of the following image to.
+		The offset must be greater than file offset at the time and aligned to
+		sector size.
+		This is only aplicable for QX/QM revision B0
